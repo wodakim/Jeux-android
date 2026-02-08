@@ -29,7 +29,14 @@ export class Projectile {
         } else if(type === 'REALITY_TEAR' || type === 'CORRUPT_CLOUD') {
             this.duration = 5; this.width = 40; this.height = 40;
         } else if(type === 'VOID_AXE') {
-            this.duration = 0.3; this.vx = (tx-x); this.vy = (ty-y); this.width = 60; this.height = 60;
+            this.duration = 1.5;
+            // Normalize direction
+            const dx = tx - x;
+            const dy = ty - y;
+            const len = Math.sqrt(dx*dx + dy*dy) || 1;
+            this.vx = (dx/len) * 500;
+            this.vy = (dy/len) * 500;
+            this.width = 40; this.height = 40;
         } else if(type === 'AUTO_TURRET') {
             this.duration = 10; this.fireTimer = 0; this.width = 20; this.height = 20;
         }
@@ -47,14 +54,14 @@ export class Projectile {
                     const d = (e.x-this.x)**2 + (e.y-this.y)**2;
                     if(d<minDist) { minDist=d; near=e; }
                 }
-                if(near) projectilePool.get().init('NEON_WAND', this.x, this.y, near.x, near.y, this.damage);
+                if(near) projectilePool.get().init('NEON_WAND', this.x, this.y, near.x + near.width/2, near.y + near.height/2, this.damage);
             }
         } else if (this.type === 'CYBER_SHURIKEN') {
             this.x += this.vx * dt; this.y += this.vy * dt;
             if(this.x < 0 || this.x > window.innerWidth) { this.vx *= -1; this.bounces--; } // Using window.innerWidth as canvas size proxy
             if(this.y < 0 || this.y > window.innerHeight) { this.vy *= -1; this.bounces--; }
             if(this.bounces < 0) this.duration = 0;
-        } else if (!['REALITY_TEAR','CORRUPT_CLOUD','PIXEL_RAIL','VOID_AXE'].includes(this.type)) {
+        } else if (!['REALITY_TEAR','CORRUPT_CLOUD','PIXEL_RAIL'].includes(this.type)) {
             this.x += this.vx * dt; this.y += this.vy * dt;
         }
 

@@ -131,57 +131,63 @@ export class Player {
     fireWeapon(w, gameCtx) {
         // We need near enemy
         let near = null, min = 99999;
+        const pCx = this.x + this.width/2;
+        const pCy = this.y + this.height/2;
+
         for(const e of enemyPool.active) {
-            const d = (e.x - this.x)**2 + (e.y - this.y)**2;
+            const eCx = e.x + e.width/2;
+            const eCy = e.y + e.height/2;
+            const d = (eCx - pCx)**2 + (eCy - pCy)**2;
             if(d < min) { min = d; near = e; }
         }
 
         w.cooldown = w.fireRate * this.fireRateMult;
         const dmg = w.damage * this.damageMult;
 
-        if(w.type === 'NEON_WAND' && near) projectilePool.get().init('NEON_WAND', this.x, this.y, near.x, near.y, dmg);
+        // Target center
+        let tx = 0, ty = 0;
+        if(near) {
+            tx = near.x + near.width/2;
+            ty = near.y + near.height/2;
+        }
+
+        if(w.type === 'NEON_WAND' && near) projectilePool.get().init('NEON_WAND', pCx, pCy, tx, ty, dmg);
         else if(w.type === 'GLITCH_BOMB') {
-            const tx = near ? near.x : this.x + Math.cos(Math.random()*6.28)*150;
-            const ty = near ? near.y : this.y + Math.sin(Math.random()*6.28)*150;
-            projectilePool.get().init('GLITCH_BOMB', this.x, this.y, tx, ty, dmg);
+            const gtx = near ? tx : pCx + Math.cos(Math.random()*6.28)*150;
+            const gty = near ? ty : pCy + Math.sin(Math.random()*6.28)*150;
+            projectilePool.get().init('GLITCH_BOMB', pCx, pCy, gtx, gty, dmg);
         }
         else if(w.type === 'REALITY_TEAR') {
-            const rx = this.x + (Math.random()-0.5)*300;
-            const ry = this.y + (Math.random()-0.5)*300;
+            const rx = pCx + (Math.random()-0.5)*300;
+            const ry = pCy + (Math.random()-0.5)*300;
             projectilePool.get().init('REALITY_TEAR', rx, ry, 0, 0, dmg);
         }
         else if(w.type === 'FORCE_FIELD') {
-            // Callback to game context to spawn explosion, or import createExplosion if safe?
-            // Safer to use gameCtx callback if available, but for now we implement simple visual locally or use helper
-            // We need to iterate enemies to push them.
-            // Let's assume entities.js exports `createExplosion` is not available directly?
-            // Actually I defined `createExplosion` in V8 loop.
-            // I will define a helper method on Player that calls gameCtx
-            if(gameCtx.createExplosion) gameCtx.createExplosion(this.x, this.y, dmg, w.pushback);
+            if(gameCtx.createExplosion) gameCtx.createExplosion(pCx, pCy, dmg, w.pushback);
         }
         else if(w.type === 'PIXEL_RAIL' && near) {
-            const angle = Math.atan2(near.y - this.y, near.x - this.x);
-            const ex = this.x + Math.cos(angle) * 1000;
-            const ey = this.y + Math.sin(angle) * 1000;
-            projectilePool.get().init('PIXEL_RAIL', this.x, this.y, ex, ey, dmg);
+            const angle = Math.atan2(ty - pCy, tx - pCx);
+            const ex = pCx + Math.cos(angle) * 1000;
+            const ey = pCy + Math.sin(angle) * 1000;
+            projectilePool.get().init('PIXEL_RAIL', pCx, pCy, ex, ey, dmg);
         }
         else if(w.type === 'CORRUPT_CLOUD') {
-            projectilePool.get().init('CORRUPT_CLOUD', this.x, this.y, 0, 0, dmg);
+            projectilePool.get().init('CORRUPT_CLOUD', pCx, pCy, 0, 0, dmg);
         }
         else if(w.type === 'AUTO_TURRET') {
-            projectilePool.get().init('AUTO_TURRET', this.x, this.y, 0, 0, dmg);
+            projectilePool.get().init('AUTO_TURRET', pCx, pCy, 0, 0, dmg);
         }
         else if(w.type === 'CYBER_SHURIKEN' && near) {
-            projectilePool.get().init('CYBER_SHURIKEN', this.x, this.y, near.x, near.y, dmg);
+            projectilePool.get().init('CYBER_SHURIKEN', pCx, pCy, tx, ty, dmg);
         }
         else if(w.type === 'VOID_AXE') {
-            const tx = near ? near.x : this.x + 100;
-            const ty = near ? near.y : this.y;
-            projectilePool.get().init('VOID_AXE', this.x, this.y, tx, ty, dmg);
+            const atx = near ? tx : pCx + 100;
+            const aty = near ? ty : pCy;
+            projectilePool.get().init('VOID_AXE', pCx, pCy, atx, aty, dmg);
         }
         else if(w.type === 'DICE_BOMB' && near) {
             const roll = Math.floor(Math.random()*100)+1;
-            projectilePool.get().init('DICE_BOMB', this.x, this.y, near.x, near.y, roll);
+            projectilePool.get().init('DICE_BOMB', pCx, pCy, tx, ty, roll);
         }
     }
 

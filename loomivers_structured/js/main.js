@@ -8,6 +8,19 @@ import { checkRectCollide } from './utils.js';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
 
+GameData.load(); // Load persistence
+
+// Audio Initialization on Interaction
+const initAudio = () => {
+    audioController.init();
+    window.removeEventListener('click', initAudio);
+    window.removeEventListener('touchstart', initAudio);
+    window.removeEventListener('keydown', initAudio);
+};
+window.addEventListener('click', initAudio);
+window.addEventListener('touchstart', initAudio);
+window.addEventListener('keydown', initAudio);
+
 let currentScene = 'BOOT';
 let lastTime = 0;
 let score = 0;
@@ -19,6 +32,8 @@ let bossSpawned = false;
 let nemesisSpawned = false;
 let endlessMode = false;
 let shakeIntensity = 0;
+let animBeat = false;
+let animTimer = 0;
 
 // Resize
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
@@ -144,7 +159,8 @@ export const sceneManager = {
             else if(r<0.6) pick={id:'DMG', t:'Power', d:'+20% Dmg'};
             else {
                 const w=WEAPON_TYPES[Math.floor(Math.random()*WEAPON_TYPES.length)];
-                pick={id:w, t:w.replace('_',' '), d:'New Weapon'};
+                const owned = player.weapons.find(pw => pw.type === w);
+                pick={id:w, t:w.replace('_',' '), d: owned ? `Upgrade (Lvl ${owned.level+1})` : 'New Weapon'};
             }
             if(!upgradeChoices.find(c=>c.id===pick.id)) upgradeChoices.push(pick);
         }
@@ -194,6 +210,9 @@ function selectUpgrade(id) {
 
 function updateGame(dt) {
     gameTime+=dt; spawnTimer+=dt; waveTimer+=dt;
+    animTimer += dt;
+    if(animTimer > 0.25) { animTimer = 0; animBeat = !animBeat; }
+
     const diff = 1 + corruptionLevel*0.1 + (endlessMode?0.5:0);
     const rate = Math.max(0.1, (1.5 - gameTime/60 * 0.1)/diff);
 
@@ -242,20 +261,51 @@ function updateGame(dt) {
     }
 }
 
-function drawGridBackground(t) {
-    ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.beginPath();
-    const s = (t*20)%50;
-    for(let x=0;x<canvas.width;x+=50) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
-    for(let y=s;y<canvas.height;y+=50) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
+function drawGridBackground(ox=0, oy=0) {
+    ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=2; ctx.beginPath();
+    const s = 100;
+    const gx = ox % s;
+    const gy = oy % s;
+    for(let x=gx; x<canvas.width; x+=s) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
+    for(let y=gy; y<canvas.height; y+=s) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
+    ctx.stroke();
+
+    // Minor grid
+    ctx.strokeStyle='#0d0d0d'; ctx.lineWidth=1; ctx.beginPath();
+    const sm = 25;
+    const gmx = ox % sm;
+    const gmy = oy % sm;
+    for(let x=gmx; x<canvas.width; x+=sm) { ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); }
+    for(let y=gmy; y<canvas.height; y+=sm) { ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); }
     ctx.stroke();
 }
 
 function drawEntity(e, c) {
-    // V5 Logic: Render at x,y (Top-Left)
-    ctx.fillStyle=c; ctx.fillRect(e.x, e.y, e.width, e.height);
-    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(e.x+e.width, e.y+4, 4, e.height); ctx.fillRect(e.x+4, e.y+e.height, e.width, 4);
+    let dy = 0;
+    let h = e.height;
+    if(animBeat && e.speed > 0) { // Only animate if moving (speed > 0 check is rough, but effective)
+        dy = 2; h -= 2;
+    }
+    // Base Shadow
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(e.x+4, e.y+e.height-4, e.width, 4);
+
+    // Body
+    ctx.fillStyle=c; ctx.fillRect(e.x, e.y+dy, e.width, h);
+
+    // Highlight (pseudo-3D)
+    ctx.fillStyle='rgba(255,255,255,0.1)'; ctx.fillRect(e.x, e.y+dy, e.width, h/2);
+
+    // Side/Bottom Shading
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.fillRect(e.x+e.width-4, e.y+dy, 4, h); // Right side
+    ctx.fillRect(e.x, e.y+dy+h-4, e.width, 4); // Bottom
 }
-function drawGem(g) { ctx.fillStyle='#ff0'; ctx.beginPath(); ctx.moveTo(g.x+g.width/2, g.y); ctx.lineTo(g.x+g.width, g.y+g.height/2); ctx.lineTo(g.x+g.width/2, g.y+g.height); ctx.lineTo(g.x, g.y+g.height/2); ctx.fill(); }
+function drawGem(g) {
+    const off = animBeat ? -2 : 0;
+    ctx.fillStyle=g.isData?'#0ff':'#ff0';
+    ctx.beginPath(); ctx.moveTo(g.x+g.width/2, g.y+off); ctx.lineTo(g.x+g.width, g.y+g.height/2+off); ctx.lineTo(g.x+g.width/2, g.y+g.height+off); ctx.lineTo(g.x, g.y+g.height/2+off); ctx.fill();
+}
 function drawProjectile(p) {
     ctx.fillStyle='#fff';
     if(p.type==='BOSS_ORB') { ctx.fillStyle='#f00'; ctx.beginPath(); ctx.arc(p.x+p.width/2, p.y+p.height/2, 8, 0, 6.28); ctx.fill(); }
@@ -267,13 +317,8 @@ function drawProjectile(p) {
 
 function render() {
     ctx.setTransform(1,0,0,1,0,0);
-    ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.beginPath();
-    const gx=-(player.x%50), gy=-(player.y%50);
-    for(let i=gx; i<canvas.width; i+=50) { ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); }
-    for(let i=gy; i<canvas.height; i+=50) { ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); }
-    ctx.stroke();
+    drawGridBackground(-player.x, -player.y);
 
     if(shakeIntensity>0) { ctx.translate((Math.random()-.5)*shakeIntensity, (Math.random()-.5)*shakeIntensity); shakeIntensity*=0.9; }
 
@@ -322,9 +367,28 @@ function render() {
     if(player.glitchMeter>=player.glitchMax) UI.drawButton('OVERDRIVE', canvas.width-150, canvas.height-100, 130, 80, '#f0f', ()=>player.activateOverdrive(gameContext));
     else { ctx.fillStyle='#333'; ctx.fillRect(canvas.width-150, canvas.height-40, 130, 20); ctx.fillStyle='#f0f'; ctx.fillRect(canvas.width-150, canvas.height-40, 130*(player.glitchMeter/player.glitchMax), 20); }
 
+    // Pause Button
+    UI.drawButton('||', canvas.width-50, 20, 30, 30, '#333', ()=>sceneManager.changeScene('PAUSED'));
+
     if(GameData.settings.crtEffect) { ctx.fillStyle="rgba(0,0,0,0.1)"; for(let i=0;i<canvas.height;i+=4)ctx.fillRect(0,i,canvas.width,2); }
     UI.handleInput();
 }
+
+const introText = [
+    "EPISODE V8",
+    "THE WEAVER'S GLITCH",
+    "",
+    "The digital realm of Loomivers is collapsing.",
+    "Corrupted data swarms the sectors,",
+    "consuming everything in its path.",
+    "",
+    "You are the last functional Avatar.",
+    "Your mission: Survive the purge,",
+    "repair the core, and defeat",
+    "The Warden of Entropy.",
+    "",
+    "Prepare for initialization..."
+];
 
 function gameLoop(ts) {
     const dt = Math.min((ts - lastTime)/1000, 0.1); lastTime = ts;
@@ -333,12 +397,35 @@ function gameLoop(ts) {
     ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
     if(currentScene==='BOOT') {
-        sceneManager.bootTimer+=dt; ctx.fillStyle='#0ff'; ctx.textAlign='center'; ctx.fillText("LOADING STRUCTURED V8...", canvas.width/2, canvas.height/2);
-        if(sceneManager.bootTimer>1) sceneManager.changeScene('TITLE');
+        sceneManager.bootTimer+=dt;
+        const scrollY = canvas.height - (sceneManager.bootTimer * 100);
+
+        ctx.fillStyle='#ff0'; ctx.font='30px VT323'; ctx.textAlign='center';
+        introText.forEach((line, i) => {
+            const ly = scrollY + i*40;
+            if(ly > 0 && ly < canvas.height) ctx.fillText(line, canvas.width/2, ly);
+        });
+
+        if(sceneManager.bootTimer > 10 || (input.taps.length > 0 && sceneManager.bootTimer > 1)) {
+             sceneManager.changeScene('TITLE');
+             input.clearTaps();
+        }
     } else if(currentScene==='TITLE') {
-        drawGridBackground(ts*0.05); ctx.fillStyle='#0ff'; ctx.font='80px VT323'; ctx.textAlign='center'; ctx.fillText("LOOMIVERS", canvas.width/2, 100);
-        UI.drawButton('PLAY', canvas.width/2-100, 220, 200, 50, '#0a0', ()=>sceneManager.changeScene('HUB'));
-        UI.drawButton('SETTINGS', canvas.width/2-100, 290, 200, 50, '#333', ()=>sceneManager.changeScene('SETTINGS'));
+        drawGridBackground(0, ts*0.05);
+        ctx.fillStyle='#0ff'; ctx.font='80px VT323'; ctx.textAlign='center';
+        // Shadow
+        ctx.fillStyle='rgba(0,255,255,0.2)'; ctx.fillText("LOOMIVERS", canvas.width/2+4, 104);
+        // Main Text
+        ctx.fillStyle='#0ff'; ctx.fillText("LOOMIVERS", canvas.width/2, 100);
+
+        ctx.font='30px VT323'; ctx.fillStyle='#fff'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
+
+        const cx = canvas.width/2 - 100;
+        let y = 220;
+        UI.drawButton('PLAY', cx, y, 200, 40, '#0a0', ()=>sceneManager.changeScene('HUB')); y+=50;
+        UI.drawButton('SETTINGS', cx, y, 200, 40, '#333', ()=>sceneManager.changeScene('SETTINGS')); y+=50;
+        UI.drawButton('CREDITS', cx, y, 200, 40, '#333', ()=>alert("Created by Jules")); y+=50;
+        UI.drawButton('QUIT', cx, y, 200, 40, '#500', ()=>location.reload());
         UI.handleInput();
     } else if(currentScene==='HUB') {
         ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
