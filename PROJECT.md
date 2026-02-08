@@ -24,13 +24,23 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 *   **Systems:** `localStorage` persistence, Currency (Data Fragments), Nemesis System.
 *   **Architecture:** Shifted to 100% Canvas UI (removed HTML overlays).
 
-### V4: Visual Fidelity & Fixes (Current)
+### V4: Visual Fidelity & Fixes
 *   **Fixes:** Resolved startup crash by removing legacy DOM references and implementing a full Canvas HUD.
 *   **Visuals:**
     *   CRT Scanline & Vignette effects.
     *   Chromatic Aberration on Hit/Overdrive.
     *   Thicker "Voxel" borders (4px).
     *   Enhanced Joystick visibility.
+
+### V5: The Warden Update (Current)
+*   **Critical Fixes:**
+    *   **Audio:** Global AudioContext resume on first touch/click (Android compliance).
+    *   **Storage:** Implemented Deep Merge to prevent save corruption when adding new settings/stats.
+    *   **Settings UI:** Replaced confusing toggles with clear Segmented Selectors.
+*   **New Content:**
+    *   **Boss:** "The Warden" (Spawns at 2:00, Multi-Phase, Boss HP Bar).
+    *   **Enemies:** "Glitch Mite" (Triangle Formation Swarms), "Data Tank" (Visual Trail).
+    *   **Projectiles:** Added enemy projectile logic (Boss Orbs).
 
 ## Technical Constraints
 1.  **Single File:** All code/css/html in `index.html` (except font imports).
@@ -39,10 +49,10 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 4.  **Android Wrapper:** Hardware Acceleration enabled, Immersive Sticky mode.
 
 ## Project Structure
-*   `loomivers_v4.html`: The latest source code.
+*   `loomivers_v5.html`: The latest source code.
 *   `android/`: Android Studio project structure.
     *   `app/src/main/assets/index.html`: The production game file.
 
 ## How to Update Android Project
-1.  Copy `loomivers_v4.html` to `android/app/src/main/assets/index.html`.
+1.  Copy `loomivers_v5.html` to `android/app/src/main/assets/index.html`.
 2.  Build & Run in Android Studio.
