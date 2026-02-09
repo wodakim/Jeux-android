@@ -14,7 +14,9 @@ def bundle():
     # Read JS modules
     js_modules = [
         'loomivers/js/constants.js',
+        'loomivers/js/assets_data.js',
         'loomivers/js/utils.js',
+        'loomivers/js/world.js',
         'loomivers/js/audio.js',
         'loomivers/js/ui.js',
         'loomivers/js/entities.js',

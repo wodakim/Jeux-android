@@ -5,6 +5,35 @@ import { sceneManager } from './game.js';
 
 // --- GAME ENTITIES ---
 
+// STATIC OBJECT
+export class StaticObject {
+    constructor(type, x, y) {
+        this.type = type;
+        this.x = x;
+        this.y = y;
+        this.width = 64;
+        this.height = 64;
+        this.solid = false;
+
+        if (type === 'TREE') {
+            // Trees are obstacles
+            this.solid = true;
+            // Collision box is smaller (trunk)
+            this.colOffsetX = 20;
+            this.colOffsetY = 40;
+            this.colW = 24;
+            this.colH = 20;
+        } else {
+            // Bushes etc
+            this.colOffsetX = 10;
+            this.colOffsetY = 10;
+            this.colW = 44;
+            this.colH = 44;
+        }
+    }
+}
+export const staticObjects = [];
+
 // PLAYER
 export class Player {
     constructor() {
@@ -116,11 +145,38 @@ export class Player {
         }
 
         const moveVec = input.getMovementVector();
-        this.x += moveVec.x * this.speed * speedMult * dt;
-        this.y += moveVec.y * this.speed * speedMult * dt;
 
+        // Move X
+        this.x += moveVec.x * this.speed * speedMult * dt;
         this.x = Math.max(0, Math.min(WORLD_WIDTH - this.width, this.x));
+
+        // Collision X
+        if (moveVec.x !== 0) {
+            for (const obj of staticObjects) {
+                if (obj.solid) {
+                    if (checkRectCollide(this, {x: obj.x + obj.colOffsetX, y: obj.y + obj.colOffsetY, width: obj.colW, height: obj.colH})) {
+                        if (moveVec.x > 0) this.x = obj.x + obj.colOffsetX - this.width;
+                        else this.x = obj.x + obj.colOffsetX + obj.colW;
+                    }
+                }
+            }
+        }
+
+        // Move Y
+        this.y += moveVec.y * this.speed * speedMult * dt;
         this.y = Math.max(0, Math.min(WORLD_HEIGHT - this.height, this.y));
+
+        // Collision Y
+        if (moveVec.y !== 0) {
+            for (const obj of staticObjects) {
+                if (obj.solid) {
+                    if (checkRectCollide(this, {x: obj.x + obj.colOffsetX, y: obj.y + obj.colOffsetY, width: obj.colW, height: obj.colH})) {
+                        if (moveVec.y > 0) this.y = obj.y + obj.colOffsetY - this.height;
+                        else this.y = obj.y + obj.colOffsetY + obj.colH;
+                    }
+                }
+            }
+        }
 
         if (this.iframeTimer > 0) {
             this.iframeTimer -= dt;
@@ -256,6 +312,60 @@ export class Enemy {
             const dist = Math.sqrt(dx*dx + dy*dy);
             let moveX = 0, moveY = 0;
             if (dist > 0) { moveX = (dx / dist) * this.speed; moveY = (dy / dist) * this.speed; }
+
+            // Static Collision for enemies (Simple resolve)
+            // Predict movement
+            const nextX = this.x + (moveX + sepX) * dt;
+            const nextY = this.y + (moveY + sepY) * dt;
+
+            let hit = false;
+            for (const obj of staticObjects) {
+                if (obj.solid) {
+                    if (checkRectCollide({x: nextX, y: nextY, width: this.width, height: this.height},
+                        {x: obj.x + obj.colOffsetX, y: obj.y + obj.colOffsetY, width: obj.colW, height: obj.colH})) {
+                        hit = true;
+                        break;
+                    }
+                }
+            }
+            // If hit tree, just slide or stop? Simplest is to not move or slide.
+            // Let's just reduce speed or slide.
+            // Split axis for enemies too? Maybe too expensive for 200 enemies.
+            // Let's just block them if they hit a tree.
+            if (hit) {
+                // Try sliding X
+                 if (!checkRectCollide({x: nextX, y: this.y, width: this.width, height: this.height},
+                        {x: 0, y: 0, width: 0, height: 0})) { // Hacky check? No.
+                    // Just basic avoidance:
+                    moveX = -moveY; moveY = moveX; // Turn 90 deg?
+                 }
+                 // Simple: Don't move into wall
+                 // Actually, swarmers should probably just flow around.
+                 // Let's skip static collision for small enemies for performance/gameplay flow?
+                 // User said "trees should be obstacle". Usually applies to player.
+                 // If enemies clip through trees it looks bad.
+                 // Let's apply a soft push force away from trees.
+            }
+
+            // Re-implement soft collision with trees
+             for (const obj of staticObjects) {
+                if (obj.solid) {
+                    // Check dist to center of tree base
+                    const treeCx = obj.x + obj.colOffsetX + obj.colW/2;
+                    const treeCy = obj.y + obj.colOffsetY + obj.colH/2;
+                    const eCx = this.x + this.width/2;
+                    const eCy = this.y + this.height/2;
+                    const ddx = eCx - treeCx;
+                    const ddy = eCy - treeCy;
+                    const d2 = ddx*ddx + ddy*ddy;
+                    const rad = (obj.colW/2 + this.width/2);
+                    if (d2 < rad*rad) {
+                        const d = Math.sqrt(d2) || 1;
+                        sepX += (ddx/d) * 200; // Strong push out
+                        sepY += (ddy/d) * 200;
+                    }
+                }
+            }
 
             if (this.type === 'WARDEN') {
                 this.attackTimer += dt;

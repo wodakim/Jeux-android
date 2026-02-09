@@ -1,7 +1,8 @@
 import { GameData } from './utils.js';
 import { UI } from './ui.js';
 import { audioController } from './audio.js';
-import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText } from './entities.js';
+import { world } from './world.js';
+import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject } from './entities.js';
 import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
 
 // --- GAME LOGIC ---
@@ -418,14 +419,6 @@ function render() {
     cx = Math.min(0, Math.max(cx, canvas.width - WORLD_WIDTH));
     cy = Math.min(0, Math.max(cy, canvas.height - WORLD_HEIGHT));
 
-    // Static Background (Starfield/Points) to avoid grid jitter
-    ctx.fillStyle = '#111';
-    for(let i=0; i<50; i++) {
-        const px = ((i * 12345) % WORLD_WIDTH + cx) % canvas.width;
-        const py = ((i * 67890) % WORLD_HEIGHT + cy) % canvas.height;
-        ctx.fillRect(px < 0 ? px+canvas.width : px, py < 0 ? py+canvas.height : py, 2, 2);
-    }
-
     if (shakeIntensity > 0) {
         const dx = (Math.random()-0.5)*shakeIntensity*2;
         const dy = (Math.random()-0.5)*shakeIntensity*2;
@@ -441,6 +434,9 @@ function render() {
     ctx.save();
     // Use Math.floor to fix sub-pixel jitter
     ctx.translate(Math.floor(cx), Math.floor(cy));
+
+    // Render World Background
+    world.render(ctx, cx, cy, canvas.width, canvas.height);
 
     // World Border
     ctx.strokeStyle = '#f00'; ctx.lineWidth = 5; ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -473,6 +469,14 @@ function render() {
             ctx.fillStyle = '#ff0'; ctx.beginPath();
             ctx.moveTo(g.x+g.width/2, g.y); ctx.lineTo(g.x+g.width, g.y+g.height/2);
             ctx.lineTo(g.x+g.width/2, g.y+g.height); ctx.lineTo(g.x, g.y+g.height/2); ctx.fill();
+        }})),
+        ...staticObjects.map(o => ({ y: o.y + o.height, d: () => {
+             if (o.x + o.width < -cx || o.x > -cx + canvas.width || o.y + o.height < -cy || o.y > -cy + canvas.height) return;
+             let key = o.type;
+             if (key === 'TREE') key = 'TREE_1';
+             if (key === 'BUSH') key = (Math.floor(o.x)%2===0) ? 'BUSH_1' : 'BUSH_2';
+             const img = world.images[key];
+             if (img) ctx.drawImage(img, o.x, o.y, o.width, o.height);
         }}))
     ].sort((a,b) => a.y - b.y);
     all.forEach(x => x.d());
@@ -548,10 +552,22 @@ function gameLoop(ts) {
 
     if (currentScene === 'BOOT') {
         sceneManager.bootTimer += dt;
+
+        if (!world.loaded && !world.loading) {
+            world.loading = true;
+            world.load().then(() => {
+                staticObjects.length = 0;
+                world.entities.forEach(e => {
+                    staticObjects.push(new StaticObject(e.type, e.x, e.y));
+                });
+            });
+        }
+
         ctx.fillStyle = '#0ff'; ctx.font = '30px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOADING LOOMIVERS...', canvas.width/2, canvas.height/2);
         ctx.fillStyle='#333'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200, 10);
         ctx.fillStyle='#0f0'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200*Math.min(1, sceneManager.bootTimer/2), 10);
-        if (sceneManager.bootTimer > 2) sceneManager.changeScene('TITLE');
+
+        if (sceneManager.bootTimer > 2 && world.loaded) sceneManager.changeScene('TITLE');
     } else if (currentScene === 'TITLE') {
         drawGridBackground(ts * 0.05);
         ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
@@ -782,3 +798,21 @@ window.addEventListener('click', resumeAudio, {once:true});
 
 lastTime = performance.now();
 requestAnimationFrame(gameLoop);
+
+// --- ANDROID LIFECYCLE HOOKS ---
+window.pauseGame = function() {
+    if (typeof sceneManager !== 'undefined' && currentScene === 'PLAYING') {
+        sceneManager.changeScene('PAUSED');
+    }
+    if (typeof audioController !== 'undefined' && audioController.audioCtx) {
+        audioController.audioCtx.suspend();
+    }
+    console.log("Game Paused via Android Lifecycle");
+};
+
+window.resumeGame = function() {
+    if (typeof audioController !== 'undefined' && audioController.audioCtx) {
+        audioController.audioCtx.resume();
+    }
+    console.log("Game Resumed via Android Lifecycle");
+};
