@@ -934,7 +934,7 @@ class Enemy {
         }
     }
 
-    takeDamage(amount, knockbackForce = 0, sourceX, sourceY) {
+    takeDamage(amount, knockbackForce = 0, sourceX, sourceY, isCrit = false) {
         this.hp -= amount;
         this.flashTimer = 0.1;
         if (knockbackForce > 0) {
@@ -944,7 +944,7 @@ class Enemy {
             this.knockbackX = (dx/dist) * knockbackForce;
             this.knockbackY = (dy/dist) * knockbackForce;
         }
-        spawnDamageText(amount, this.x, this.y);
+        spawnDamageText(amount, this.x, this.y, isCrit);
         if (this.hp <= 0) this.die();
     }
 
@@ -962,6 +962,10 @@ class Enemy {
         for(let i=0; i<pCount; i++) spawnParticle(this.x, this.y, this.color);
         sceneManager.addScore(this.type === 'TANK' ? 50 : 10);
         if(sceneManager.recordKill) sceneManager.recordKill(this.type);
+
+        if (this.type === 'WARDEN') {
+            sceneManager.onBossDeath();
+        }
 
         if (this.isNemesis) {
             player.gainXp(100);
@@ -1082,11 +1086,14 @@ const particlePool = new ObjectPool(() => new Particle(), 200);
 // DAMAGE TEXT
 class DamageText {
     constructor() { this.active = false; }
-    init(amount, x, y) {
+    init(amount, x, y, isCrit = false) {
         this.active = true; this.x = x; this.y = y;
         this.text = typeof amount === 'number' ? Math.floor(amount) : amount;
         this.life = 0.8;
         this.vx = (Math.random() - 0.5) * 20;
+        this.isCrit = isCrit;
+        this.fontSize = isCrit ? 40 : 30;
+        this.color = isCrit ? '#f00' : '#fff';
     }
     update(dt) {
         if (!this.active) return;
@@ -1100,7 +1107,7 @@ const damageTextPool = new ObjectPool(() => new DamageText(), 50);
 // HELPERS
 function spawnGem(x, y, value, isData = false) { gemPool.get().init(x, y, value, isData); }
 function spawnParticle(x, y, color) { particlePool.get().init(x, y, color); }
-function spawnDamageText(amount, x, y) { damageTextPool.get().init(amount, x, y); }
+function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.get().init(amount, x, y, isCrit); }
 
 
 // --- SOURCE: loomivers/js/game.js ---
@@ -1238,6 +1245,14 @@ sceneManager = {
         GameData.progress.bestiary[type]++;
         GameData.saveProgress();
     },
+    onBossDeath() {
+        bossSpawned = false;
+        // Resume wave timer or spawn logic if needed immediately,
+        // but updating bossSpawned to false will allow spawnTimer to trigger spawns again in updateGame.
+        // Maybe add some score or visual feedback here too?
+        sceneManager.addScore(1000);
+        spawnDamageText("WARDEN DEFEATED!", player.x, player.y - 100);
+    },
     endGame() { endGameLogic(); },
     triggerLevelUpScreen() { triggerLevelUpScreenLogic(); }
 };
@@ -1310,12 +1325,12 @@ window.fireWeaponGlobal = function(p, w) {
 };
 
 function createExplosion(x, y, damage, range = 100) {
-    sceneManager.addShake(15);
+    // sceneManager.addShake(15); // Disabled per user request
     for (const e of enemyPool.active) {
         const dx = (e.x + e.width/2) - x;
         const dy = (e.y + e.height/2) - y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist < range) e.takeDamage(damage, 300, x, y);
+        if (dist < range) e.takeDamage(damage, 300, x, y, true); // Pass isCrit=true for explosion/heavy hits
     }
     const pCount = GameData.settings.particles === 'High' ? 20 : 5;
     for(let i=0; i<pCount; i++) spawnParticle(x + (Math.random()-0.5)*range, y + (Math.random()-0.5)*range, '#ff0');
@@ -1473,26 +1488,30 @@ function updateGame(dt) {
         } else {
             for (const e of enemyPool.active) {
                 if (p.x < e.x+e.width && p.x+p.width > e.x && p.y < e.y+e.height && p.y+p.height > e.y) {
+                    // Calculate crit chance (e.g. 10%)
+                    const isCrit = Math.random() < 0.1;
+                    const dmg = isCrit ? p.damage * 2 : p.damage;
+
                     if (p.type === 'NEON_WAND') {
-                        e.takeDamage(p.damage, 100, p.x, p.y);
+                        e.takeDamage(dmg, 100, p.x, p.y, isCrit);
                         projectilePool.release(p);
                         break;
                     }
                     else if (p.type === 'GLITCH_BOMB') {
-                        createExplosion(p.x, p.y, p.damage);
+                        createExplosion(p.x, p.y, p.damage); // Explosion handles its own damage logic
                         projectilePool.release(p);
                         break;
                     }
                     else if (p.type === 'PIXEL_RAIL') {
-                        e.takeDamage(p.damage, 50, p.x, p.y);
+                        e.takeDamage(dmg, 50, p.x, p.y, isCrit);
                         // Do not release, it penetrates
                     }
                     else if (p.type === 'VOID_AXE') {
-                        e.takeDamage(p.damage, 200, p.x, p.y);
+                        e.takeDamage(dmg, 200, p.x, p.y, isCrit);
                         // Penetrates
                     }
                     else if (p.type === 'FORCE_FIELD') {
-                         e.takeDamage(p.damage, 300, p.x, p.y);
+                         e.takeDamage(dmg, 300, p.x, p.y, isCrit);
                     }
                 }
             }
@@ -1620,7 +1639,15 @@ function render() {
         else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
     });
     particlePool.active.forEach(p => { ctx.fillStyle=p.color; ctx.globalAlpha=p.life*2; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha=1; });
-    damageTextPool.active.forEach(t => { ctx.globalAlpha=Math.min(1, t.life*2); ctx.fillStyle='#fff'; ctx.font='30px VT323'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeText(t.text, t.x, t.y); ctx.fillText(t.text, t.x, t.y); ctx.globalAlpha=1; });
+    damageTextPool.active.forEach(t => {
+        ctx.globalAlpha=Math.min(1, t.life*2);
+        ctx.fillStyle = t.color || '#fff';
+        ctx.font = `${t.fontSize || 30}px VT323`;
+        ctx.strokeStyle='#000'; ctx.lineWidth=2;
+        ctx.strokeText(t.text, t.x, t.y);
+        ctx.fillText(t.text, t.x, t.y);
+        ctx.globalAlpha=1;
+    });
 
     ctx.restore();
 
@@ -1631,6 +1658,21 @@ function render() {
     ctx.fillText(`SCORE: ${score}`, 20, 40);
     ctx.fillText(`TIME: ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, 20, 70);
     ctx.fillText(`LVL: ${player.level}`, 20, 100);
+
+    // Boss HP
+    if (bossSpawned) {
+        const warden = enemyPool.active.find(e => e.type === 'WARDEN');
+        if (warden) {
+            const bbw = canvas.width * 0.6;
+            const bbx = (canvas.width - bbw) / 2;
+            const bby = 80;
+            ctx.fillStyle = '#333'; ctx.fillRect(bbx, bby, bbw, 30);
+            ctx.fillStyle = '#f0f'; ctx.fillRect(bbx, bby, bbw * (Math.max(0, warden.hp) / warden.maxHp), 30);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bbx, bby, bbw, 30);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '24px VT323';
+            ctx.fillText("THE WARDEN", canvas.width / 2, bby + 22);
+        }
+    }
 
     // HP
     const bw = 200, bx = (canvas.width-bw)/2, by = canvas.height-40;
@@ -1763,38 +1805,77 @@ function gameLoop(ts) {
         ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText("CHARACTER SELECT", canvas.width/2, 50);
 
-        let y=100;
-        // Scroll or limited list? For 10 chars, we might need pagination or smaller icons.
-        // For now, let's just show them in a list. If it overflows, we'll need scrolling logic.
-        // Let's implement a simple scroll or just list them tighter.
-        // The list is quite long (10 items).
-        // Let's do 2 columns.
+        // Single column list, centered, easier for mobile
         const keys = Object.keys(CHARACTERS);
-        for(let i=0; i<keys.length; i++) {
+        const itemH = 80;
+        const totalH = keys.length * itemH;
+        let startY = 100;
+
+        // Simple pagination logic if needed, but for 10 items (800px) might need scrolling.
+        // Assuming user can scroll or we fit them?
+        // Let's implement simple pagination.
+        if (!window.wardrobePage) window.wardrobePage = 0;
+        const itemsPerPage = 5;
+        const totalPages = Math.ceil(keys.length / itemsPerPage);
+
+        const startIdx = window.wardrobePage * itemsPerPage;
+        const endIdx = Math.min(startIdx + itemsPerPage, keys.length);
+
+        for(let i=startIdx; i<endIdx; i++) {
             const k = keys[i];
             const c = CHARACTERS[k];
             const u = GameData.progress.unlockedChars.includes(k);
             const s = selectedCharacter === k;
 
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const bx = canvas.width/2 - 250 + (col * 260);
-            const by = 100 + (row * 80);
+            const by = startY + ((i - startIdx) * 90);
+            const bx = canvas.width/2 - 200;
 
-            ctx.fillStyle=c.color; ctx.fillRect(bx, by, 50, 50);
-            ctx.textAlign='left'; ctx.fillStyle=s?'#0f0':'#fff'; ctx.font='20px VT323';
-            ctx.fillText(c.name, bx + 60, by + 20);
-            ctx.font='16px VT323'; ctx.fillStyle='#ccc';
-            ctx.fillText(c.desc, bx + 60, by + 40);
+            // Background for item
+            ctx.fillStyle = s ? '#224422' : '#222';
+            ctx.fillRect(bx, by, 400, 80);
+            ctx.strokeStyle = s ? '#0f0' : '#555';
+            ctx.strokeRect(bx, by, 400, 80);
+
+            // Sprite Preview
+            const img = world.images['PLAYER_STAND'];
+            if (img) {
+                // Tinting logic is hard with raw canvas without extensive caching or composite ops.
+                // Just draw the base sprite + a colored rect indicator for now to keep it simple/performant.
+                ctx.drawImage(img, bx + 10, by + 10, 60, 60);
+                // Color indicator
+                ctx.fillStyle = c.color;
+                ctx.fillRect(bx + 55, by + 55, 15, 15);
+                ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 55, by + 55, 15, 15);
+            } else {
+                ctx.fillStyle = c.color;
+                ctx.fillRect(bx + 10, by + 10, 60, 60);
+            }
+
+            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='24px VT323';
+            ctx.fillText(c.name, bx + 80, by + 30);
+            ctx.font='16px VT323'; ctx.fillStyle='#aaa';
+            ctx.fillText(c.desc, bx + 80, by + 55);
+
+            const btnX = bx + 280;
+            const btnY = by + 15;
 
             if(u){
-                if(!s) UI.drawButton(ctx, 'SELECT', bx+180, by, 60, 50, '#00a', ()=>selectedCharacter=k);
-                else { ctx.fillStyle='#0f0'; ctx.fillText("READY", bx+180, by+30); }
+                if(!s) UI.drawButton(ctx, 'SELECT', btnX, btnY, 100, 50, '#00a', ()=>selectedCharacter=k);
+                else { ctx.fillStyle='#0f0'; ctx.fillText("EQUIPPED", btnX + 50, btnY + 25); }
             } else if(GameData.progress.currency>=c.price) {
-                UI.drawButton(ctx, `$${c.price}`, bx+180, by, 60, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
+                UI.drawButton(ctx, `$${c.price}`, btnX, btnY, 100, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
             } else {
-                ctx.fillStyle='#555'; ctx.fillText(`LOCKED $${c.price}`, bx+180, by+30);
+                ctx.fillStyle='#555'; ctx.textAlign='center'; ctx.fillText(`LOCKED`, btnX + 50, btnY + 15);
+                ctx.fillText(`$${c.price}`, btnX + 50, btnY + 35);
             }
+        }
+
+        // Pagination Controls
+        if (totalPages > 1) {
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '20px VT323';
+            ctx.fillText(`PAGE ${window.wardrobePage + 1}/${totalPages}`, canvas.width/2, startY + (itemsPerPage * 90) + 20);
+            if (window.wardrobePage > 0) UI.drawButton(ctx, '<', canvas.width/2 - 100, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage--);
+            if (window.wardrobePage < totalPages - 1) UI.drawButton(ctx, '>', canvas.width/2 + 50, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage++);
         }
 
         UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
@@ -1818,12 +1899,35 @@ function gameLoop(ts) {
         UI.handleInput(input);
     } else if (currentScene === 'PAUSED') {
         render();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+
         ctx.fillStyle = '#fff'; ctx.font = '60px VT323'; ctx.textAlign = 'center';
-        ctx.fillText('PAUSED', canvas.width/2, canvas.height/3);
-        UI.drawButton(ctx, 'RESUME', canvas.width/2-100, canvas.height/2-40, 200, 60, '#0a0', () => sceneManager.changeScene('PLAYING'));
-        UI.drawButton(ctx, 'QUIT', canvas.width/2-100, canvas.height/2+40, 200, 60, '#a00', () => sceneManager.changeScene('HUB'));
+        ctx.fillText('PAUSED', canvas.width/2, 80);
+
+        // Show Stats
+        ctx.font = '24px VT323'; ctx.textAlign = 'left';
+        let y = 140;
+        ctx.fillText("--- WEAPONS ---", canvas.width/2 - 200, y);
+        y+=30;
+        player.weapons.forEach(w => {
+            // Friendly Name Logic could be extracted
+            const name = w.type.replace('_', ' ');
+            ctx.fillText(`${name} Lv.${w.level} (Dmg: ${Math.floor(w.damage * player.damageMult)})`, canvas.width/2 - 200, y);
+            y+=25;
+        });
+
+        y += 20;
+        ctx.fillText("--- STATS ---", canvas.width/2 - 200, y);
+        y+=30;
+        ctx.fillText(`HP: ${Math.floor(player.hp)}/${player.maxHp}`, canvas.width/2 - 200, y); y+=25;
+        ctx.fillText(`LVL: ${player.level} (XP: ${player.xp}/${player.nextLevelXp})`, canvas.width/2 - 200, y); y+=25;
+        ctx.fillText(`DMG MULT: x${player.damageMult.toFixed(2)}`, canvas.width/2 - 200, y); y+=25;
+        ctx.fillText(`FIRE RATE: x${(1/player.fireRateMult).toFixed(2)}`, canvas.width/2 - 200, y); y+=25;
+        ctx.fillText(`SPEED: ${Math.floor(player.speed)}`, canvas.width/2 - 200, y); y+=25;
+
+        UI.drawButton(ctx, 'RESUME', canvas.width/2+50, canvas.height-150, 150, 50, '#0a0', () => sceneManager.changeScene('PLAYING'));
+        UI.drawButton(ctx, 'QUIT', canvas.width/2+50, canvas.height-80, 150, 50, '#a00', () => sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'GAME_OVER') {
         render(); ctx.fillStyle='rgba(50,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);

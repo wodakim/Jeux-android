@@ -406,7 +406,7 @@ export class Enemy {
         }
     }
 
-    takeDamage(amount, knockbackForce = 0, sourceX, sourceY) {
+    takeDamage(amount, knockbackForce = 0, sourceX, sourceY, isCrit = false) {
         this.hp -= amount;
         this.flashTimer = 0.1;
         if (knockbackForce > 0) {
@@ -416,7 +416,7 @@ export class Enemy {
             this.knockbackX = (dx/dist) * knockbackForce;
             this.knockbackY = (dy/dist) * knockbackForce;
         }
-        spawnDamageText(amount, this.x, this.y);
+        spawnDamageText(amount, this.x, this.y, isCrit);
         if (this.hp <= 0) this.die();
     }
 
@@ -434,6 +434,10 @@ export class Enemy {
         for(let i=0; i<pCount; i++) spawnParticle(this.x, this.y, this.color);
         sceneManager.addScore(this.type === 'TANK' ? 50 : 10);
         if(sceneManager.recordKill) sceneManager.recordKill(this.type);
+
+        if (this.type === 'WARDEN') {
+            sceneManager.onBossDeath();
+        }
 
         if (this.isNemesis) {
             player.gainXp(100);
@@ -554,11 +558,14 @@ export const particlePool = new ObjectPool(() => new Particle(), 200);
 // DAMAGE TEXT
 export class DamageText {
     constructor() { this.active = false; }
-    init(amount, x, y) {
+    init(amount, x, y, isCrit = false) {
         this.active = true; this.x = x; this.y = y;
         this.text = typeof amount === 'number' ? Math.floor(amount) : amount;
         this.life = 0.8;
         this.vx = (Math.random() - 0.5) * 20;
+        this.isCrit = isCrit;
+        this.fontSize = isCrit ? 40 : 30;
+        this.color = isCrit ? '#f00' : '#fff';
     }
     update(dt) {
         if (!this.active) return;
@@ -572,4 +579,4 @@ export const damageTextPool = new ObjectPool(() => new DamageText(), 50);
 // HELPERS
 export function spawnGem(x, y, value, isData = false) { gemPool.get().init(x, y, value, isData); }
 export function spawnParticle(x, y, color) { particlePool.get().init(x, y, color); }
-export function spawnDamageText(amount, x, y) { damageTextPool.get().init(amount, x, y); }
+export function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.get().init(amount, x, y, isCrit); }
