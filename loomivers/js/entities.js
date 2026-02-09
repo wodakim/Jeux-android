@@ -53,6 +53,12 @@ export class Player {
         this.damageMult = 1.0;
         this.fireRateMult = 1.0;
 
+        // Animation
+        this.animTimer = 0;
+        this.isMoving = false;
+        this.facingRight = true;
+        this.frameIndex = 0;
+
         // Overdrive
         this.glitchMeter = 0;
         this.glitchMax = 100;
@@ -145,6 +151,21 @@ export class Player {
         }
 
         const moveVec = input.getMovementVector();
+
+        this.isMoving = moveVec.x !== 0 || moveVec.y !== 0;
+        if (moveVec.x !== 0) {
+            this.facingRight = moveVec.x > 0;
+        }
+
+        if (this.isMoving) {
+            this.animTimer += dt;
+            if (this.animTimer > 0.15) { // Walk speed
+                this.animTimer = 0;
+                this.frameIndex = (this.frameIndex + 1) % 2; // Toggle between walk 1 and 2
+            }
+        } else {
+            this.frameIndex = 0;
+        }
 
         // Move X
         this.x += moveVec.x * this.speed * speedMult * dt;

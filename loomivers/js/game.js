@@ -444,13 +444,38 @@ function render() {
     // Entities
     const all = [
         { y: player.y + player.height, d: () => {
-            // OPTIMIZATION: Removed ShadowBlur (Costly)
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-            ctx.fillStyle = '#0aa';
-            ctx.fillRect(player.x+player.width, player.y+4, 4, player.height);
-            ctx.fillRect(player.x+4, player.y+player.height, player.width, 4);
-            if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(player.x, player.y, player.width, player.height); }
+            let spriteKey = 'PLAYER_STAND';
+            if (player.isMoving) {
+                spriteKey = player.frameIndex === 0 ? 'PLAYER_WALK1' : 'PLAYER_WALK2';
+            }
+            const img = world.images[spriteKey];
+
+            if (img) {
+                ctx.save();
+                const cx = Math.floor(player.x + player.width / 2);
+                const cy = Math.floor(player.y + player.height / 2);
+
+                ctx.translate(cx, cy);
+                if (!player.facingRight) ctx.scale(-1, 1);
+
+                const drawW = 48;
+                const drawH = 48;
+
+                if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) {
+                     ctx.globalCompositeOperation = 'lighter';
+                     ctx.globalAlpha = 0.7;
+                }
+
+                ctx.drawImage(img, -drawW/2, -drawH/2 - 10, drawW, drawH);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = player.color;
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                ctx.fillStyle = '#0aa';
+                ctx.fillRect(player.x+player.width, player.y+4, 4, player.height);
+                ctx.fillRect(player.x+4, player.y+player.height, player.width, 4);
+                if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(player.x, player.y, player.width, player.height); }
+            }
         }},
         ...enemyPool.active.map(e => ({ y: e.y + e.height, d: () => {
             if (e.isNemesis) {
