@@ -1129,12 +1129,14 @@ class InputHandler {
         this.joystick = { x: 0, y: 0, active: false, originX: 0, originY: 0 };
         this.keys = {};
         this.taps = [];
+        this.lastTouchTime = 0;
         this.setupTouch();
         this.setupKeyboard();
     }
 
     setupTouch() {
         document.addEventListener('touchstart', (e) => {
+            this.lastTouchTime = Date.now();
             const touch = e.changedTouches[0];
             if (currentScene !== 'PLAYING') {
                 this.taps.push({ x: touch.clientX, y: touch.clientY });
@@ -1176,6 +1178,8 @@ class InputHandler {
         });
 
         document.addEventListener('mousedown', (e) => {
+             // Debounce: Ignore mouse events if touch events were triggered recently (500ms)
+             if (Date.now() - this.lastTouchTime < 500) return;
              this.taps.push({ x: e.clientX, y: e.clientY });
         });
     }
@@ -1546,7 +1550,8 @@ function render() {
         { y: player.y + player.height, d: () => {
             let spriteKey = 'PLAYER_STAND';
             if (player.isMoving) {
-                spriteKey = player.frameIndex === 0 ? 'PLAYER_WALK1' : 'PLAYER_WALK2';
+                // Animation Cycle: WALK1 -> STAND -> WALK1 -> STAND (User requested removal of WALK2)
+                spriteKey = player.frameIndex === 0 ? 'PLAYER_WALK1' : 'PLAYER_STAND';
             }
             const img = world.images[spriteKey];
 
