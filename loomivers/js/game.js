@@ -17,6 +17,7 @@ let spawnTimer = 0;
 let waveTimer = 0;
 let corruptionLevel = 0;
 let bossSpawned = false;
+let nextBossTime = 300; // First boss at 5 minutes
 let nemesisSpawned = false;
 let shakeIntensity = 0;
 let storyY = 0;
@@ -285,7 +286,7 @@ function selectUpgrade(id) {
 
 function startGame() {
     score = 0; gameTime = 0; spawnTimer = 0; waveTimer = 0;
-    bossSpawned = false; nemesisSpawned = false;
+    bossSpawned = false; nextBossTime = 300; nemesisSpawned = false;
 
     player.reset(selectedCharacter);
     enemyPool.reset(); projectilePool.reset(); gemPool.reset(); particlePool.reset(); damageTextPool.reset();
@@ -300,12 +301,26 @@ function updateGame(dt) {
     const diffMult = 1.0 + (corruptionLevel * 0.1);
     const spawnRate = Math.max(0.2, (1.5 - (gameTime / 60) * 0.1) / diffMult);
 
-    if (!bossSpawned && gameTime > 120) {
+    if (!bossSpawned && gameTime >= nextBossTime) {
         bossSpawned = true;
-        spawnDamageText("WARNING: WARDEN DETECTED", player.x, player.y - 100);
+        nextBossTime += 300; // Next boss in 5 mins
+
         sceneManager.addShake(30);
         const a = Math.random() * Math.PI * 2;
-        enemyPool.get().init('WARDEN', player.x + Math.cos(a)*400, player.y + Math.sin(a)*400);
+        const x = player.x + Math.cos(a)*400;
+        const y = player.y + Math.sin(a)*400;
+
+        if (gameTime >= 1200) { // 20 mins: Map Boss
+            spawnDamageText("WARNING: THE CORRUPTOR HAS ARRIVED", player.x, player.y - 100);
+            const boss = enemyPool.get();
+            boss.init('WARDEN', x, y);
+            // Make map boss stronger
+            boss.hp *= 5; boss.maxHp *= 5; boss.width *= 1.5; boss.height *= 1.5; boss.color = '#f00';
+            // Custom behavior could be added in Enemy class, but stats suffice for now.
+        } else {
+            spawnDamageText("WARNING: WARDEN DETECTED", player.x, player.y - 100);
+            enemyPool.get().init('WARDEN', x, y);
+        }
     }
 
     if (spawnTimer > spawnRate && !bossSpawned) {
@@ -669,13 +684,27 @@ function gameLoop(ts) {
         UI.handleInput(input);
     } else if (currentScene === 'HUB') {
         ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle='#0ff'; ctx.textAlign='center'; ctx.fillText("THE SANCTUARY", canvas.width/2, 50);
-        ctx.fillStyle='#ff0'; ctx.textAlign='left'; ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, 20, 40);
-        UI.drawButton(ctx, 'ENTER THE GLITCH', canvas.width/2-100, 120, 200, 50, '#f0f', () => { if(GameData.progress.storySeen) startGame(); else sceneManager.changeScene('STORY'); storyY=canvas.height; });
-        UI.drawButton(ctx, 'CHARACTER SELECT', canvas.width/2-100, 190, 200, 50, '#333', () => sceneManager.changeScene('WARDROBE'));
-        UI.drawButton(ctx, 'UPGRADE SHOP', canvas.width/2-100, 260, 200, 50, '#333', () => sceneManager.changeScene('SHOP'));
-        UI.drawButton(ctx, 'ARCHIVES', canvas.width/2-100, 330, 200, 50, '#333', () => sceneManager.changeScene('ARCHIVES'));
-        UI.drawButton(ctx, 'TROPHIES', canvas.width/2-100, 400, 200, 50, '#333', () => sceneManager.changeScene('TROPHIES'));
+
+        // Dynamic layout calculation to prevent overlap
+        const totalHeight = 50 * 5 + 20 * 4; // 5 buttons (50px) + 4 gaps (20px) = 330px
+        const startY = Math.max(100, (canvas.height - totalHeight) / 2 + 30); // Center vertically but keep header space
+
+        ctx.fillStyle='#0ff'; ctx.textAlign='center'; ctx.font='40px monospace'; ctx.fillText("THE SANCTUARY", canvas.width/2, startY - 60);
+        ctx.fillStyle='#ff0'; ctx.textAlign='left'; ctx.font='24px monospace'; ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, 20, 40);
+
+        let y = startY;
+        const gap = 70;
+
+        UI.drawButton(ctx, 'ENTER THE GLITCH', canvas.width/2-100, y, 200, 50, '#f0f', () => { if(GameData.progress.storySeen) startGame(); else sceneManager.changeScene('STORY'); storyY=canvas.height; });
+        y += gap;
+        UI.drawButton(ctx, 'CHARACTER SELECT', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('WARDROBE'));
+        y += gap;
+        UI.drawButton(ctx, 'UPGRADE SHOP', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('SHOP'));
+        y += gap;
+        UI.drawButton(ctx, 'ARCHIVES', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('ARCHIVES'));
+        y += gap;
+        UI.drawButton(ctx, 'TROPHIES', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('TROPHIES'));
+
         UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', () => sceneManager.changeScene('TITLE'));
         UI.handleInput(input);
     } else if (currentScene === 'ARCHIVES') {

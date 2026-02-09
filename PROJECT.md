@@ -32,7 +32,7 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
     *   Thicker "Voxel" borders (4px).
     *   Enhanced Joystick visibility.
 
-### V5: The Warden Update (Current)
+### V5: The Warden Update
 *   **Critical Fixes:**
     *   **Audio:** Global AudioContext resume on first touch/click (Android compliance).
     *   **Storage:** Implemented Deep Merge to prevent save corruption when adding new settings/stats.
@@ -42,17 +42,40 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
     *   **Enemies:** "Glitch Mite" (Triangle Formation Swarms), "Data Tank" (Visual Trail).
     *   **Projectiles:** Added enemy projectile logic (Boss Orbs).
 
+### V6: Code Modularization & Clean State
+*   **Refactor:** Complete separation of concerns into ES6 Modules (`game.js`, `entities.js`, `world.js`, `ui.js`).
+*   **Bundling:** Custom Python script to merge modules into a single HTML file for Android.
+*   **Assets:** Base64 asset injection pipeline.
+
+### V7: Infinite Map & Boss Rework (Current)
+*   **Infinite Map:**
+    *   Procedural Chunk Generation (`world.js`) with Perlin-like noise.
+    *   **Optimization:** Strictly limits rendering to 2 chunks around the player based on screen size.
+    *   **Bug Fixes:** Removed camera clamping to allow infinite scrolling.
+*   **Enemy Logic:**
+    *   **Tight Leash:** Enemies respawn just off-screen (Diagonal/2 + 150px) to maintain pressure.
+    *   **Boss Schedule:**
+        *   Boss spawns every 5 minutes (300s).
+        *   Normal waves resume after boss death.
+        *   **The Corruptor (Map Boss):** Spawns at 20 minutes (1200s) with enhanced stats.
+*   **UI Polish:**
+    *   **Main Menu:** Dynamic layout calculation to prevent button overlap on various screen sizes.
+    *   **Font:** Removed external Google Fonts (`VT323`) in favor of system `monospace` for full offline support.
+
+## Todo / Remaining
+*   [ ] **Visual Polish:** Add unique sprite for "The Corruptor".
+*   [ ] **Audio:** Add distinct boss music track.
+*   [ ] **Balance:** Tune "Corruptor" HP scaling based on player feedback.
+
 ## Technical Constraints
 1.  **Single File:** All code/css/html in `index.html` (except font imports).
-2.  **No External Assets:** Procedural Canvas drawing only.
+2.  **No External Assets:** Procedural Canvas drawing only (or Base64).
 3.  **Mobile First:** Touch controls, Landscape, Performance optimization (Pooling).
 4.  **Android Wrapper:** Hardware Acceleration enabled, Immersive Sticky mode.
+5.  **Offline Ready:** No external CDNs (Fonts, JS libs).
 
 ## Project Structure
-*   `loomivers_v5.html`: The latest source code.
-*   `android/`: Android Studio project structure.
-    *   `app/src/main/assets/index.html`: The production game file.
-
-## How to Update Android Project
-1.  Copy `loomivers_v5.html` to `android/app/src/main/assets/index.html`.
-2.  Build & Run in Android Studio.
+*   `loomivers/`: Source code modules.
+*   `bundle.py`: Build script.
+*   `loomivers_final.html`: The bundled production game file.
+*   `android/app/src/main/assets/index.html`: Android asset file (copy of `loomivers_final.html`).
