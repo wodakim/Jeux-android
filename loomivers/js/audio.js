@@ -11,7 +11,6 @@ export class AudioController {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         this.audioCtx = new AudioContext();
 
-        // Keep awake hack: silent buffer
         const buffer = this.audioCtx.createBuffer(1, 1, 22050);
         const source = this.audioCtx.createBufferSource();
         source.buffer = buffer;

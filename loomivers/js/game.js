@@ -1,7 +1,7 @@
 import { GameData } from './utils.js';
 import { UI } from './ui.js';
 import { audioController } from './audio.js';
-import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, createExplosion } from './entities.js';
+import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText } from './entities.js';
 import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
 
 // --- GAME LOGIC ---
@@ -137,17 +137,78 @@ function resize() { canvas.width = window.innerWidth; canvas.height = window.inn
 window.addEventListener('resize', resize);
 resize();
 
-// Game Loop
-export function startGame() {
-    score = 0; gameTime = 0; spawnTimer = 0; waveTimer = 0;
-    bossSpawned = false; nemesisSpawned = false; corruptionLevel = 0;
+// --- GLOBAL WEAPON LOGIC ---
+window.fireWeaponGlobal = function(p, w) {
+    let nearest = null, minDist = Infinity;
+    // Find nearest enemy center to player center
+    const pCx = p.x + p.width/2;
+    const pCy = p.y + p.height/2;
 
-    player.reset(selectedCharacter);
-    enemyPool.reset(); projectilePool.reset(); gemPool.reset(); particlePool.reset(); damageTextPool.reset();
+    for (const e of enemyPool.active) {
+        const eCx = e.x + e.width/2;
+        const eCy = e.y + e.height/2;
+        const dx = eCx - pCx;
+        const dy = eCy - pCy;
+        const dist = dx*dx + dy*dy;
+        if (dist < minDist) { minDist = dist; nearest = e; }
+    }
 
-    sceneManager.changeScene('PLAYING');
-    lastTime = performance.now();
-    requestAnimationFrame(gameLoop);
+    const dmg = w.damage * p.damageMult;
+    const count = w.projectiles || 1;
+
+    if (w.type === 'NEON_WAND') {
+        if (nearest && minDist < 400*400) {
+            for(let i=0; i<count; i++) {
+                const spread = (i - (count-1)/2) * 20;
+                // Target center of enemy
+                const tx = nearest.x + nearest.width/2 + spread;
+                const ty = nearest.y + nearest.height/2 + spread;
+                projectilePool.get().init('NEON_WAND', pCx, pCy, tx, ty, dmg);
+            }
+            w.cooldown = w.fireRate * p.fireRateMult;
+        }
+    } else if (w.type === 'GLITCH_BOMB') {
+        for(let i=0; i<count; i++) {
+            let tx, ty;
+            if (enemyPool.active.length > 0) {
+                const r = enemyPool.active[Math.floor(Math.random() * enemyPool.active.length)];
+                tx = r.x + r.width/2; ty = r.y + r.height/2;
+            } else {
+                const a = Math.random() * Math.PI * 2;
+                tx = pCx + Math.cos(a)*200; ty = pCy + Math.sin(a)*200;
+            }
+            projectilePool.get().init('GLITCH_BOMB', pCx, pCy, tx, ty, dmg);
+        }
+        w.cooldown = w.fireRate * p.fireRateMult;
+    } else if (w.type === 'PIXEL_RAIL') {
+        if (nearest) {
+            // Shoots straight at nearest, infinite speed/ray essentially but implemented as fast projectile
+            projectilePool.get().init('PIXEL_RAIL', pCx, pCy, nearest.x + nearest.width/2, nearest.y + nearest.height/2, dmg);
+            w.cooldown = w.fireRate * p.fireRateMult;
+        }
+    } else if (w.type === 'VOID_AXE') {
+        // Throws axe towards nearest or random
+        let tx = pCx + 100, ty = pCy;
+        if (nearest) { tx = nearest.x + nearest.width/2; ty = nearest.y + nearest.height/2; }
+        projectilePool.get().init('VOID_AXE', pCx, pCy, tx, ty, dmg);
+        w.cooldown = w.fireRate * p.fireRateMult;
+    } else if (w.type === 'FORCE_FIELD') {
+        // Area damage around player
+        createExplosion(pCx, pCy, dmg, 150);
+        w.cooldown = w.fireRate * p.fireRateMult;
+    }
+};
+
+export function createExplosion(x, y, damage, range = 100) {
+    sceneManager.addShake(15);
+    for (const e of enemyPool.active) {
+        const dx = (e.x + e.width/2) - x;
+        const dy = (e.y + e.height/2) - y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < range) e.takeDamage(damage, 300, x, y);
+    }
+    const pCount = GameData.settings.particles === 'High' ? 20 : 5;
+    for(let i=0; i<pCount; i++) spawnParticle(x + (Math.random()-0.5)*range, y + (Math.random()-0.5)*range, '#ff0');
 }
 
 function endGameLogic() {
@@ -167,9 +228,9 @@ function triggerLevelUpScreenLogic() {
         { id: 'NEON_WAND', title: 'Neon Wand', desc: 'New Weapon / +Damage' },
         { id: 'DATA_ORBIT', title: 'Data Orbit', desc: 'New Weapon / +Speed' },
         { id: 'GLITCH_BOMB', title: 'Glitch Bomb', desc: 'New Weapon / +Damage' },
-        { id: 'PIXEL_RAIL', title: 'Pixel Rail', desc: 'New Weapon' },
-        { id: 'VOID_AXE', title: 'Void Axe', desc: 'New Weapon' },
-        { id: 'FORCE_FIELD', title: 'Force Field', desc: 'New Weapon' },
+        { id: 'PIXEL_RAIL', title: 'Pixel Rail', desc: 'New Weapon / High Dmg' },
+        { id: 'VOID_AXE', title: 'Void Axe', desc: 'New Weapon / Penetrating' },
+        { id: 'FORCE_FIELD', title: 'Force Field', desc: 'New Weapon / Area' },
         { id: 'HEAL', title: 'System Repair', desc: 'Heal 50 HP' },
         { id: 'MULTISHOT', title: 'Multishot', desc: '+1 Projectile to All' },
         { id: 'ATK_SPEED', title: 'Overclock', desc: '+20% Fire Rate' },
@@ -204,6 +265,18 @@ function selectUpgrade(id) {
     requestAnimationFrame(gameLoop);
 }
 
+function startGame() {
+    score = 0; gameTime = 0; spawnTimer = 0; waveTimer = 0;
+    bossSpawned = false; nemesisSpawned = false;
+
+    player.reset(selectedCharacter);
+    enemyPool.reset(); projectilePool.reset(); gemPool.reset(); particlePool.reset(); damageTextPool.reset();
+
+    sceneManager.changeScene('PLAYING');
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
 function updateGame(dt) {
     gameTime += dt; spawnTimer += dt; waveTimer += dt;
     const diffMult = 1.0 + (corruptionLevel * 0.1);
@@ -213,20 +286,21 @@ function updateGame(dt) {
         bossSpawned = true;
         spawnDamageText("WARNING: WARDEN DETECTED", player.x, player.y - 100);
         sceneManager.addShake(30);
-        const a = Math.random() * 6.28;
+        const a = Math.random() * Math.PI * 2;
         enemyPool.get().init('WARDEN', player.x + Math.cos(a)*400, player.y + Math.sin(a)*400);
     }
 
     if (spawnTimer > spawnRate && !bossSpawned) {
         spawnTimer = 0;
-        const a = Math.random() * 6.28;
+        const a = Math.random() * Math.PI * 2;
+        // Spawn far away to accommodate larger world/camera
         const r = Math.sqrt(canvas.width**2 + canvas.height**2)/2 + 150;
         const sx = player.x + Math.cos(a)*r, sy = player.y + Math.sin(a)*r;
         const rand = Math.random();
         let type = 'SWARMER';
         if (rand > 0.95) {
             for(let i=0; i<3; i++) {
-                const off = (i/3)*6.28;
+                const off = (i/3)*Math.PI*2;
                 const m = enemyPool.get();
                 m.init('GLITCH_MITE', sx+Math.cos(off)*30, sy+Math.sin(off)*30);
                 m.hp *= diffMult;
@@ -241,7 +315,28 @@ function updateGame(dt) {
         }
     }
 
-    player.update(dt, input);
+    // Nemesis
+    if (!nemesisSpawned && gameTime > 10 && GameData.progress.nemesis) {
+        nemesisSpawned = true;
+        const a = Math.random() * 6.28; const r = 300;
+        const nem = enemyPool.get();
+        nem.init(GameData.progress.nemesis.type, player.x + Math.cos(a)*r, player.y + Math.sin(a)*r);
+        nem.isNemesis = true; nem.hp = GameData.progress.nemesis.hp * 2; nem.color = '#ff0';
+        nem.width *= 1.5; nem.height *= 1.5;
+    }
+
+    // Wave
+    if (waveTimer > 60 && !bossSpawned) {
+        waveTimer = 0;
+        const ab = Math.random()*6.28;
+        for(let i=0;i<20;i++) {
+            const a = ab + i*0.1;
+            const r = Math.sqrt(canvas.width**2+canvas.height**2)/2+150;
+            enemyPool.get().init('SWARMER', player.x+Math.cos(a)*r, player.y+Math.sin(a)*r);
+        }
+    }
+
+    player.update(dt, input, canvas.width, canvas.height);
     enemyPool.active.forEach(e => e.update(dt));
     projectilePool.active.forEach(p => p.update(dt));
     gemPool.active.forEach(g => {
@@ -251,7 +346,7 @@ function updateGame(dt) {
     particlePool.active.forEach(p => p.update(dt));
     damageTextPool.active.forEach(t => t.update(dt));
 
-    // Collisions
+    // Collision
     if (player.iframeTimer <= 0) {
         for (const e of enemyPool.active) {
             if (e.x < player.x+player.width && e.x+e.width > player.x && e.y < player.y+player.height && e.y+e.height > player.y) {
@@ -268,11 +363,27 @@ function updateGame(dt) {
         } else {
             for (const e of enemyPool.active) {
                 if (p.x < e.x+e.width && p.x+p.width > e.x && p.y < e.y+e.height && p.y+p.height > e.y) {
-                    if (p.type === 'NEON_WAND') { e.takeDamage(p.damage, 100, p.x, p.y); projectilePool.release(p); break; }
-                    else if (p.type === 'GLITCH_BOMB') { createExplosion(p.x, p.y, p.damage); projectilePool.release(p); break; }
-                    else if (p.type === 'PIXEL_RAIL') e.takeDamage(p.damage, 50, p.x, p.y);
-                    else if (p.type === 'VOID_AXE') e.takeDamage(p.damage, 200, p.x, p.y);
-                    else if (p.type === 'FORCE_FIELD') e.takeDamage(p.damage, 300, p.x, p.y);
+                    if (p.type === 'NEON_WAND') {
+                        e.takeDamage(p.damage, 100, p.x, p.y);
+                        projectilePool.release(p);
+                        break;
+                    }
+                    else if (p.type === 'GLITCH_BOMB') {
+                        createExplosion(p.x, p.y, p.damage);
+                        projectilePool.release(p);
+                        break;
+                    }
+                    else if (p.type === 'PIXEL_RAIL') {
+                        e.takeDamage(p.damage, 50, p.x, p.y);
+                        // Do not release, it penetrates
+                    }
+                    else if (p.type === 'VOID_AXE') {
+                        e.takeDamage(p.damage, 200, p.x, p.y);
+                        // Penetrates
+                    }
+                    else if (p.type === 'FORCE_FIELD') {
+                         e.takeDamage(p.damage, 300, p.x, p.y);
+                    }
                 }
             }
         }
@@ -291,20 +402,18 @@ function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (shakeIntensity > 0) {
-        const dx = (Math.random()-0.5)*shakeIntensity*2;
-        const dy = (Math.random()-0.5)*shakeIntensity*2;
-        ctx.translate(dx, dy);
-        shakeIntensity *= 0.9;
-    }
-
-    ctx.save();
+    // Camera Calculation
     let cx = canvas.width/2 - player.x - player.width/2;
     let cy = canvas.height/2 - player.y - player.height/2;
+    // Clamp camera to world bounds if we want, or just let it float.
+    // The requirement says "Plein Écran", and adapting.
+    // But we have WORLD_WIDTH = 4000.
+    // Let's clamp so we don't see infinite void, but the "void" is just blackness.
+    // Clamping:
     cx = Math.min(0, Math.max(cx, canvas.width - WORLD_WIDTH));
     cy = Math.min(0, Math.max(cy, canvas.height - WORLD_HEIGHT));
 
-    // Draw Grid
+    // Grid (World Relative)
     ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.beginPath();
     const gs = 50;
     const sx = -(cx % gs), sy = -(cy % gs);
@@ -312,6 +421,19 @@ function render() {
     for (let y = sy; y < canvas.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
     ctx.stroke();
 
+    if (shakeIntensity > 0) {
+        const dx = (Math.random()-0.5)*shakeIntensity*2;
+        const dy = (Math.random()-0.5)*shakeIntensity*2;
+        ctx.translate(dx, dy);
+        shakeIntensity *= 0.9;
+    }
+
+    if (player.overdriveActive || player.iframeTimer > 0.3) {
+        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle='rgba(255,0,0,0.5)';
+        ctx.translate((Math.random()-0.5)*10, 0);
+    }
+
+    ctx.save();
     ctx.translate(cx, cy);
 
     // World Border
@@ -325,8 +447,13 @@ function render() {
             ctx.shadowBlur = 0; ctx.fillStyle = '#0aa';
             ctx.fillRect(player.x+player.width, player.y+4, 4, player.height);
             ctx.fillRect(player.x+4, player.y+player.height, player.width, 4);
+            if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(player.x, player.y, player.width, player.height); }
         }},
         ...enemyPool.active.map(e => ({ y: e.y + e.height, d: () => {
+            if (e.isNemesis) {
+                ctx.fillStyle='#ff0'; ctx.beginPath();
+                ctx.moveTo(e.x,e.y-10); ctx.lineTo(e.x+5,e.y-2); ctx.lineTo(e.x+10,e.y-10); ctx.lineTo(e.x+15,e.y-2); ctx.lineTo(e.x+20,e.y-10); ctx.lineTo(e.x+20,e.y); ctx.lineTo(e.x,e.y); ctx.fill();
+            }
             ctx.fillStyle = e.flashTimer > 0 ? '#fff' : e.color;
             ctx.fillRect(e.x, e.y, e.width, e.height);
             if (e.flashTimer <= 0) {
@@ -344,19 +471,25 @@ function render() {
     all.forEach(x => x.d());
 
     projectilePool.active.forEach(p => {
-        ctx.fillStyle = p.type==='GLITCH_BOMB'?'#f0f':'#fff';
-        if (p.type==='GLITCH_BOMB') { ctx.beginPath(); ctx.arc(p.x+p.width/2, p.y+p.height/2, p.width/2, 0, 6.28); ctx.fill(); }
-        else ctx.fillRect(p.x, p.y, p.width, p.height);
+        ctx.shadowBlur=10; ctx.shadowColor='#fff'; ctx.fillStyle='#fff';
+        if(p.type==='NEON_WAND') ctx.fillRect(p.x,p.y,p.width,p.height);
+        else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.shadowColor='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
+        else if(p.type==='PIXEL_RAIL') { ctx.fillStyle='#0ff'; ctx.fillRect(p.x, p.y, p.width, p.height); }
+        else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
+        ctx.shadowBlur=0;
     });
     particlePool.active.forEach(p => { ctx.fillStyle=p.color; ctx.globalAlpha=p.life*2; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha=1; });
-    damageTextPool.active.forEach(t => { ctx.fillStyle='#fff'; ctx.font='30px VT323'; ctx.fillText(t.text, t.x, t.y); });
+    damageTextPool.active.forEach(t => { ctx.globalAlpha=Math.min(1, t.life*2); ctx.fillStyle='#fff'; ctx.font='30px VT323'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeText(t.text, t.x, t.y); ctx.fillText(t.text, t.x, t.y); ctx.globalAlpha=1; });
 
     ctx.restore();
+
+    if (player.overdriveActive || player.iframeTimer > 0.3) ctx.globalCompositeOperation = 'source-over';
 
     // HUD
     ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '24px VT323';
     ctx.fillText(`SCORE: ${score}`, 20, 40);
     ctx.fillText(`TIME: ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, 20, 70);
+    ctx.fillText(`LVL: ${player.level}`, 20, 100);
 
     // HP
     const bw = 200, bx = (canvas.width-bw)/2, by = canvas.height-40;
@@ -372,9 +505,28 @@ function render() {
     if (input.joystick.active) {
         let size = 50; if (GameData.settings.joystickSize === 'Small') size=30; if (GameData.settings.joystickSize === 'Large') size=70;
         ctx.strokeStyle = 'rgba(0,255,255,0.3)'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(input.joystick.originX, input.joystick.originY, size, 0, 6.28); ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fill();
         const kx = input.joystick.originX + input.joystick.x*size;
         const ky = input.joystick.originY + input.joystick.y*size;
-        ctx.fillStyle='rgba(0,255,255,0.8)'; ctx.beginPath(); ctx.arc(kx, ky, 25, 0, 6.28); ctx.fill();
+        ctx.fillStyle='rgba(0,255,255,0.8)'; ctx.shadowBlur=10; ctx.shadowColor='#0ff'; ctx.beginPath(); ctx.arc(kx, ky, 25, 0, 6.28); ctx.fill(); ctx.shadowBlur=0;
+    }
+
+    if (GameData.settings.crtEffect) {
+        ctx.fillStyle = "rgba(0,0,0,0.15)"; for(let i=0; i<canvas.height; i+=4) ctx.fillRect(0,i,canvas.width,2);
+        const g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height/3, canvas.width/2, canvas.height/2, canvas.height);
+        g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.6)");
+        ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+
+    if (currentScene === 'PLAYING') {
+        if (player.glitchMeter >= player.glitchMax) UI.drawButton(ctx, 'OVERDRIVE!', canvas.width-150, canvas.height-100, 130, 80, '#f0f', () => player.activateOverdrive());
+        else {
+            const p = player.glitchMeter/player.glitchMax;
+            ctx.fillStyle='#333'; ctx.fillRect(canvas.width-150, canvas.height-40, 130, 20);
+            ctx.fillStyle='#f0f'; ctx.fillRect(canvas.width-150, canvas.height-40, 130*p, 20);
+            ctx.strokeStyle='#fff'; ctx.strokeRect(canvas.width-150, canvas.height-40, 130, 20);
+        }
+        UI.drawButton(ctx, '||', canvas.width-60, 20, 40, 40, '#333', ()=>sceneManager.changeScene('PAUSED'));
     }
 
     UI.handleInput(input);
@@ -389,41 +541,71 @@ function gameLoop(ts) {
     if (currentScene === 'BOOT') {
         sceneManager.bootTimer += dt;
         ctx.fillStyle = '#0ff'; ctx.font = '30px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOADING LOOMIVERS...', canvas.width/2, canvas.height/2);
+        ctx.fillStyle='#333'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200, 10);
+        ctx.fillStyle='#0f0'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200*Math.min(1, sceneManager.bootTimer/2), 10);
         if (sceneManager.bootTimer > 2) sceneManager.changeScene('TITLE');
     } else if (currentScene === 'TITLE') {
-        ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
+        drawGridBackground(ts * 0.05);
+        ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.shadowBlur=20; ctx.shadowColor='#0ff'; ctx.fillText('LOOMIVERS', canvas.width/2, 100); ctx.shadowBlur=0;
         ctx.fillStyle = '#fff'; ctx.font = '30px VT323'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
         UI.drawButton(ctx, 'PLAY', canvas.width/2-100, 220, 200, 50, '#0a0', () => sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'SETTINGS', canvas.width/2-100, 290, 200, 50, '#333', () => sceneManager.changeScene('SETTINGS'));
+        UI.drawButton(ctx, 'CREDITS', canvas.width/2-100, 360, 200, 50, '#333', () => alert("Created by Montano Mickael, Founder of Logoloom"));
+        UI.drawButton(ctx, 'QUIT', canvas.width/2-100, 430, 200, 50, '#500', () => window.close());
         UI.handleInput(input);
     } else if (currentScene === 'HUB') {
         ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle='#0ff'; ctx.textAlign='center'; ctx.fillText("THE SANCTUARY", canvas.width/2, 50);
-
-        const cx = canvas.width/2 - 100;
-        UI.drawButton(ctx, 'ENTER GLITCH', cx, 120, 200, 50, '#0a0', () => startGame());
-        UI.drawButton(ctx, 'CHARACTERS', cx, 190, 200, 50, '#f0f', () => sceneManager.changeScene('WARDROBE'));
+        ctx.fillStyle='#ff0'; ctx.textAlign='left'; ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, 20, 40);
+        UI.drawButton(ctx, 'ENTER THE GLITCH', canvas.width/2-100, 120, 200, 50, '#f0f', () => { if(GameData.progress.storySeen) startGame(); else sceneManager.changeScene('STORY'); storyY=canvas.height; });
+        UI.drawButton(ctx, 'CHARACTER SELECT', canvas.width/2-100, 190, 200, 50, '#333', () => sceneManager.changeScene('WARDROBE'));
+        UI.drawButton(ctx, 'UPGRADE SHOP', canvas.width/2-100, 260, 200, 50, '#333', () => sceneManager.changeScene('SHOP'));
         UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', () => sceneManager.changeScene('TITLE'));
-
         UI.handleInput(input);
     } else if (currentScene === 'WARDROBE') {
         ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText("CHARACTER SELECT", canvas.width/2, 50);
+
         let y=100;
-        Object.keys(CHARACTERS).forEach(k => {
-            const c=CHARACTERS[k], u=GameData.progress.unlockedChars.includes(k), s=selectedCharacter===k;
-            ctx.fillStyle=c.color; ctx.fillRect(canvas.width/2-200,y,50,50);
-            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='28px VT323'; ctx.fillText(c.name+(s?" (READY)":""), canvas.width/2-130, y+35);
-            if(u){ if(!s) UI.drawButton(ctx, 'SELECT', canvas.width/2+150, y, 100, 50, '#00a', ()=>selectedCharacter=k); }
-            else if(GameData.progress.currency>=c.price) UI.drawButton(ctx, `BUY ${c.price}`, canvas.width/2+150, y, 100, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
-            else { ctx.fillStyle='#333'; ctx.fillRect(canvas.width/2+150,y,100,50); ctx.fillStyle='#555'; ctx.fillText("LOCKED", canvas.width/2+160, y+30); }
-            y+=70;
-        });
+        // Scroll or limited list? For 10 chars, we might need pagination or smaller icons.
+        // For now, let's just show them in a list. If it overflows, we'll need scrolling logic.
+        // Let's implement a simple scroll or just list them tighter.
+        // The list is quite long (10 items).
+        // Let's do 2 columns.
+        const keys = Object.keys(CHARACTERS);
+        for(let i=0; i<keys.length; i++) {
+            const k = keys[i];
+            const c = CHARACTERS[k];
+            const u = GameData.progress.unlockedChars.includes(k);
+            const s = selectedCharacter === k;
+
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const bx = canvas.width/2 - 250 + (col * 260);
+            const by = 100 + (row * 80);
+
+            ctx.fillStyle=c.color; ctx.fillRect(bx, by, 50, 50);
+            ctx.textAlign='left'; ctx.fillStyle=s?'#0f0':'#fff'; ctx.font='20px VT323';
+            ctx.fillText(c.name, bx + 60, by + 20);
+            ctx.font='16px VT323'; ctx.fillStyle='#ccc';
+            ctx.fillText(c.desc, bx + 60, by + 40);
+
+            if(u){
+                if(!s) UI.drawButton(ctx, 'SELECT', bx+180, by, 60, 50, '#00a', ()=>selectedCharacter=k);
+                else { ctx.fillStyle='#0f0'; ctx.fillText("READY", bx+180, by+30); }
+            } else if(GameData.progress.currency>=c.price) {
+                UI.drawButton(ctx, `$${c.price}`, bx+180, by, 60, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
+            } else {
+                ctx.fillStyle='#555'; ctx.fillText(`LOCKED $${c.price}`, bx+180, by+30);
+            }
+        }
+
         UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'PLAYING') {
         updateGame(dt); render();
     } else if (currentScene === 'LEVEL_UP') {
-        render(); ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        render(); ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
         let y=180;
         activeUpgradeChoices.forEach(c => {
             UI.drawButton(ctx, "", canvas.width/2-200, y, 400, 80, '#222', ()=>selectUpgrade(c.id));
@@ -434,13 +616,61 @@ function gameLoop(ts) {
         UI.handleInput(input);
     } else if (currentScene === 'GAME_OVER') {
         render(); ctx.fillStyle='rgba(50,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.textAlign='center'; ctx.fillStyle='#f00'; ctx.fillText("GAME OVER", canvas.width/2, canvas.height/3);
+        ctx.textAlign='center'; ctx.fillStyle='#f00'; ctx.fillText("CRITICAL FAILURE", canvas.width/2, canvas.height/3);
         UI.drawButton(ctx, 'RETRY', canvas.width/2-100, canvas.height/2+60, 200, 60, '#fff', ()=>startGame());
+        UI.drawButton(ctx, 'RETURN', canvas.width/2-100, canvas.height/2+140, 200, 60, '#333', ()=>sceneManager.changeScene('HUB'));
+        UI.handleInput(input);
+    } else if (currentScene === 'STORY') {
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        storyY-=50*dt; let y=storyY;
+        const txt=["THE LOOM...", "IS UNRAVELING.", "", "YOU ARE THE LAST.", "SURVIVE."];
+        ctx.fillStyle='#0ff'; ctx.textAlign='center';
+        txt.forEach(l=>{ctx.fillText(l, canvas.width/2, y); y+=50;});
+        if(y<0 || input.taps.length>0) { GameData.progress.storySeen=true; GameData.saveProgress(); startGame(); }
+    } else if (currentScene === 'SHOP') {
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('UPGRADE SHOP', canvas.width/2, 50);
+
+        let y = 100;
+        const upgrades = [
+            { id: 'health', name: 'MAX HP', cost: 100 },
+            { id: 'damage', name: 'DAMAGE', cost: 150 },
+            { id: 'magnet', name: 'MAGNET', cost: 100 }
+        ];
+
+        upgrades.forEach(u => {
+             const lvl = GameData.progress.upgrades[u.id] || 0;
+             const cost = u.cost * (lvl + 1);
+             ctx.fillStyle='#fff'; ctx.textAlign='left';
+             ctx.fillText(`${u.name} (Lvl ${lvl})`, canvas.width/2-150, y+30);
+
+             if (GameData.progress.currency >= cost) {
+                 UI.drawButton(ctx, `UPGRADE ($${cost})`, canvas.width/2+50, y, 150, 40, '#0a0', () => {
+                     GameData.progress.currency -= cost;
+                     GameData.progress.upgrades[u.id]++;
+                     GameData.saveProgress();
+                 });
+             } else {
+                 ctx.fillStyle='#555'; ctx.fillRect(canvas.width/2+50, y, 150, 40);
+                 ctx.fillStyle='#888'; ctx.fillText(`$${cost}`, canvas.width/2+90, y+25);
+             }
+             y += 60;
+        });
+
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     }
 
     input.clearTaps();
     requestAnimationFrame(gameLoop);
+}
+
+function drawGridBackground(offset) {
+    ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.beginPath();
+    const gs = 50; const sy = (offset*20)%gs;
+    for(let x=0;x<canvas.width;x+=gs){ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);}
+    for(let y=sy;y<canvas.height;y+=gs){ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);}
+    ctx.stroke();
 }
 
 GameData.load();

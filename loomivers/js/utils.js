@@ -13,12 +13,39 @@ export function deepMerge(defaults, saved) {
     return result;
 }
 
-export function checkRectCollide(r1, r2) {
-    return (r1.x < r2.x + r2.width &&
-            r1.x + r1.width > r2.x &&
-            r1.y < r2.y + r2.height &&
-            r1.y + r1.height > r2.y);
-}
+export const GameData = {
+    progress: JSON.parse(JSON.stringify(DefaultGameData.progress)),
+    settings: JSON.parse(JSON.stringify(DefaultGameData.settings)),
+
+    saveProgress() {
+        localStorage.setItem('loomivers_progress', JSON.stringify(this.progress));
+    },
+
+    saveSettings() {
+        localStorage.setItem('loomivers_settings', JSON.stringify(this.settings));
+    },
+
+    load() {
+        try {
+            const prog = localStorage.getItem('loomivers_progress');
+            if (prog) {
+                this.progress = deepMerge(DefaultGameData.progress, JSON.parse(prog));
+            }
+
+            const set = localStorage.getItem('loomivers_settings');
+            if (set) {
+                this.settings = deepMerge(DefaultGameData.settings, JSON.parse(set));
+            }
+        } catch (e) {
+            console.error("Save Data Corrupt, resetting to defaults", e);
+        }
+    },
+
+    resetProgress() {
+        this.progress = JSON.parse(JSON.stringify(DefaultGameData.progress));
+        this.saveProgress();
+    }
+};
 
 export class ObjectPool {
     constructor(createFn, initialSize = 100) {
@@ -61,36 +88,9 @@ export class ObjectPool {
     }
 }
 
-export const GameData = {
-    progress: { ...DefaultGameData.progress },
-    settings: { ...DefaultGameData.settings },
-
-    saveProgress() {
-        localStorage.setItem('loomivers_progress', JSON.stringify(this.progress));
-    },
-
-    saveSettings() {
-        localStorage.setItem('loomivers_settings', JSON.stringify(this.settings));
-    },
-
-    load() {
-        try {
-            const prog = localStorage.getItem('loomivers_progress');
-            if (prog) {
-                this.progress = deepMerge(DefaultGameData.progress, JSON.parse(prog));
-            }
-
-            const set = localStorage.getItem('loomivers_settings');
-            if (set) {
-                this.settings = deepMerge(DefaultGameData.settings, JSON.parse(set));
-            }
-        } catch (e) {
-            console.error("Save Data Corrupt, resetting to defaults", e);
-        }
-    },
-
-    resetProgress() {
-        this.progress = JSON.parse(JSON.stringify(DefaultGameData.progress));
-        this.saveProgress();
-    }
-};
+export function checkRectCollide(r1, r2) {
+    return (r1.x < r2.x + r2.width &&
+            r1.x + r1.width > r2.x &&
+            r1.y < r2.y + r2.height &&
+            r1.y + r1.height > r2.y);
+}
