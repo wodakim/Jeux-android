@@ -3,7 +3,7 @@ body {
     padding: 0;
     overflow: hidden;
     background-color: #050505; /* Deep void color */
-    font-family: 'VT323', monospace;
+    font-family: 'monospace';
     color: #fff;
     user-select: none;
     -webkit-user-select: none;

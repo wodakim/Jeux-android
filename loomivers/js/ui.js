@@ -13,7 +13,7 @@ export const UI = {
         ctx.strokeRect(x, y, w, h);
 
         ctx.fillStyle = '#fff';
-        ctx.font = '24px VT323';
+        ctx.font = '24px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(text, x + w/2, y + h/2);
@@ -31,7 +31,7 @@ export const UI = {
         ctx.fillRect(x, y, w * value, h);
 
         ctx.fillStyle = '#fff';
-        ctx.font = '24px VT323';
+        ctx.font = '24px monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(`${label}: ${Math.round(value*100)}%`, x, y - 15);
@@ -42,7 +42,7 @@ export const UI = {
     drawSelector(ctx, label, options, currentValue, x, y, w, h, onChange) {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fff';
-        ctx.font = '24px VT323';
+        ctx.font = '24px monospace';
         ctx.fillText(label, x, y - 15);
 
         const optW = w / options.length;

@@ -571,7 +571,7 @@ function render() {
     damageTextPool.active.forEach(t => {
         ctx.globalAlpha=Math.min(1, t.life*2);
         ctx.fillStyle = t.color || '#fff';
-        ctx.font = `${t.fontSize || 30}px VT323`;
+        ctx.font = `${t.fontSize || 30}px monospace`;
         ctx.strokeStyle='#000'; ctx.lineWidth=2;
         ctx.strokeText(t.text, t.x, t.y);
         ctx.fillText(t.text, t.x, t.y);
@@ -583,7 +583,7 @@ function render() {
     if (player.overdriveActive || player.iframeTimer > 0.3) ctx.globalCompositeOperation = 'source-over';
 
     // HUD
-    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '24px VT323';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '24px monospace';
     ctx.fillText(`SCORE: ${score}`, 20, 40);
     ctx.fillText(`TIME: ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, 20, 70);
     ctx.fillText(`LVL: ${player.level}`, 20, 100);
@@ -598,7 +598,7 @@ function render() {
             ctx.fillStyle = '#333'; ctx.fillRect(bbx, bby, bbw, 30);
             ctx.fillStyle = '#f0f'; ctx.fillRect(bbx, bby, bbw * (Math.max(0, warden.hp) / warden.maxHp), 30);
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bbx, bby, bbw, 30);
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '24px VT323';
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '24px monospace';
             ctx.fillText("THE WARDEN", canvas.width / 2, bby + 22);
         }
     }
@@ -657,22 +657,19 @@ function gameLoop(ts) {
         if (!world.loaded && !world.loading) {
             world.loading = true;
             world.load().then(() => {
-                staticObjects.length = 0;
-                world.entities.forEach(e => {
-                    staticObjects.push(new StaticObject(e.type, e.x, e.y));
-                });
+                // Initial load complete
             });
         }
 
-        ctx.fillStyle = '#0ff'; ctx.font = '30px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOADING LOOMIVERS...', canvas.width/2, canvas.height/2);
+        ctx.fillStyle = '#0ff'; ctx.font = '30px monospace'; ctx.textAlign = 'center'; ctx.fillText('LOADING LOOMIVERS...', canvas.width/2, canvas.height/2);
         ctx.fillStyle='#333'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200, 10);
         ctx.fillStyle='#0f0'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200*Math.min(1, sceneManager.bootTimer/2), 10);
 
         if (sceneManager.bootTimer > 2 && world.loaded) sceneManager.changeScene('TITLE');
     } else if (currentScene === 'TITLE') {
         drawGridBackground(ts * 0.05);
-        ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
-        ctx.fillStyle = '#fff'; ctx.font = '30px VT323'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
+        ctx.fillStyle = '#0ff'; ctx.font = '80px monospace'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
+        ctx.fillStyle = '#fff'; ctx.font = '30px monospace'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
         UI.drawButton(ctx, 'PLAY', canvas.width/2-100, 220, 200, 50, '#0a0', () => sceneManager.changeScene('HUB'));
         UI.drawButton(ctx, 'SETTINGS', canvas.width/2-100, 290, 200, 50, '#333', () => sceneManager.changeScene('SETTINGS'));
         UI.drawButton(ctx, 'CREDITS', canvas.width/2-100, 360, 200, 50, '#333', () => alert("Created by Montano Mickael, Founder of Logoloom"));
@@ -694,9 +691,9 @@ function gameLoop(ts) {
         ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.fillText('ARCHIVES', canvas.width/2, 50);
         let y=100;
         const types = Object.keys(GameData.progress.bestiary);
-        if(types.length===0) { ctx.font='20px VT323'; ctx.fillText("NO DATA COLLECTED", canvas.width/2, 200); }
+        if(types.length===0) { ctx.font='20px monospace'; ctx.fillText("NO DATA COLLECTED", canvas.width/2, 200); }
         else {
-            ctx.font='24px VT323';
+            ctx.font='24px monospace';
             types.forEach(t => {
                 ctx.textAlign='left';
                 ctx.fillText(`${t}: ${GameData.progress.bestiary[t]} KILLS`, canvas.width/2-100, y);
@@ -780,9 +777,9 @@ function gameLoop(ts) {
                 ctx.fillRect(bx + 10, by + 10, 60, 60);
             }
 
-            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='24px VT323';
+            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='24px monospace';
             ctx.fillText(c.name, bx + 80, by + 30);
-            ctx.font='16px VT323'; ctx.fillStyle='#aaa';
+            ctx.font='16px monospace'; ctx.fillStyle='#aaa';
             ctx.fillText(c.desc, bx + 80, by + 55);
 
             const btnX = bx + 280;
@@ -801,7 +798,7 @@ function gameLoop(ts) {
 
         // Pagination Controls
         if (totalPages > 1) {
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '20px VT323';
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '20px monospace';
             ctx.fillText(`PAGE ${window.wardrobePage + 1}/${totalPages}`, canvas.width/2, startY + (itemsPerPage * 90) + 20);
             if (window.wardrobePage > 0) UI.drawButton(ctx, '<', canvas.width/2 - 100, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage--);
             if (window.wardrobePage < totalPages - 1) UI.drawButton(ctx, '>', canvas.width/2 + 50, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage++);
@@ -814,7 +811,7 @@ function gameLoop(ts) {
     } else if (currentScene === 'LEVEL_UP') {
         render(); ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-        ctx.fillStyle='#fff'; ctx.font='40px VT323'; ctx.textAlign='center';
+        ctx.fillStyle='#fff'; ctx.font='40px monospace'; ctx.textAlign='center';
         ctx.fillText("LEVEL UP!", canvas.width/2, 80);
 
         // Responsive Cards Layout
@@ -854,11 +851,11 @@ function gameLoop(ts) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#fff'; ctx.font = '60px VT323'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff'; ctx.font = '60px monospace'; ctx.textAlign = 'center';
         ctx.fillText('PAUSED', canvas.width/2, 80);
 
         // Show Stats
-        ctx.font = '24px VT323'; ctx.textAlign = 'left';
+        ctx.font = '24px monospace'; ctx.textAlign = 'left';
         let y = 140;
         ctx.fillText("--- WEAPONS ---", canvas.width/2 - 200, y);
         y+=30;
@@ -1024,7 +1021,7 @@ function drawUpgradeCard(ctx, upgrade, x, y, w, h, action) {
     ctx.fillRect(iconX, iconY, iconSize, iconSize);
     ctx.strokeStyle = '#0ff';
     ctx.strokeRect(iconX, iconY, iconSize, iconSize);
-    ctx.fillStyle = '#0ff'; ctx.font = '40px VT323'; ctx.textAlign='center';
+    ctx.fillStyle = '#0ff'; ctx.font = '40px monospace'; ctx.textAlign='center';
     ctx.fillText("?", iconX + iconSize/2, iconY + iconSize/2 + 10);
 
     // Title
@@ -1032,11 +1029,11 @@ function drawUpgradeCard(ctx, upgrade, x, y, w, h, action) {
     const hasWep = player.weapons.some(w => w.type === upgrade.id);
     const prefix = (!isStat && !hasWep) ? "NEW! " : (hasWep ? "LVL UP! " : "");
 
-    ctx.fillStyle = '#ff0'; ctx.font = '24px VT323'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0'; ctx.font = '24px monospace'; ctx.textAlign = 'center';
     ctx.fillText(prefix + upgrade.title, x + w/2, iconY + iconSize + 30);
 
     // Description
-    ctx.fillStyle = '#ccc'; ctx.font = '18px VT323';
+    ctx.fillStyle = '#ccc'; ctx.font = '18px monospace';
     // Wrap text if needed? For now simple
     ctx.fillText(upgrade.desc, x + w/2, iconY + iconSize + 60);
 
