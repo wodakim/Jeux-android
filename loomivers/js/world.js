@@ -120,20 +120,19 @@ export class World {
 
         const startChunkX = Math.floor(startX / this.chunkSize);
         const startChunkY = Math.floor(startY / this.chunkSize);
-        // +2 buffer
+        // Strict buffer for "2 chunks around" requirement based on screen size
+        // We calculate visible range and add a small buffer (1 chunk).
         const endChunkX = Math.floor((startX + width) / this.chunkSize) + 1;
         const endChunkY = Math.floor((startY + height) / this.chunkSize) + 1;
 
         const objects = [];
 
-        // Clean up far away chunks
-        // We keep chunks around the player.
-        // Let's iterate all chunks and delete those far away.
-        // "Effacer de la memoire quand le joueur quitte celle ci"
-        // 2 tiles (chunks) buffer.
+        // Automatic screen size verification is implicit in 'width' and 'height' parameters passed from game loop.
+        // We only keep chunks within the visible area + buffer.
 
         const keepKeys = new Set();
 
+        // Iterate visible range + 1 buffer
         for (let cy = startChunkY - 1; cy <= endChunkY + 1; cy++) {
             for (let cx = startChunkX - 1; cx <= endChunkX + 1; cx++) {
                 const chunk = this.getChunk(cx, cy);

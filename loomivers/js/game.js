@@ -355,9 +355,9 @@ function updateGame(dt) {
     }
 
     // Enemy Respawn / Despawn Logic
-    // "5 tiles away" -> Tile is 64px. 5 tiles is 320px.
-    // "Outside screen" -> Screen diagonal/2 + 320.
-    const spawnRadius = Math.sqrt(canvas.width**2 + canvas.height**2)/2 + 320;
+    // "Tight leash" -> Respawn enemies closer to keep the horde pressure constant.
+    const screenDiag = Math.sqrt(canvas.width**2 + canvas.height**2);
+    const spawnRadius = screenDiag/2 + 150; // Despawn if slightly further out
 
     enemyPool.active.forEach(e => {
         const dx = e.x - player.x;
@@ -366,10 +366,8 @@ function updateGame(dt) {
 
         if (dist > spawnRadius) {
             // Respawn closer (just outside view)
-            // "Intelligent" -> In front of player movement? Or random circle?
-            // Random circle at edge of screen is standard for survival games.
             const angle = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(canvas.width**2 + canvas.height**2)/2 + 50;
+            const r = screenDiag/2 + 50; // Just outside screen
             e.x = player.x + Math.cos(angle) * r;
             e.y = player.y + Math.sin(angle) * r;
         }
@@ -448,13 +446,7 @@ function render() {
     // Camera Calculation
     let cx = canvas.width/2 - player.x - player.width/2;
     let cy = canvas.height/2 - player.y - player.height/2;
-    // Clamp camera to world bounds if we want, or just let it float.
-    // The requirement says "Plein Écran", and adapting.
-    // But we have WORLD_WIDTH = 4000.
-    // Let's clamp so we don't see infinite void, but the "void" is just blackness.
-    // Clamping:
-    cx = Math.min(0, Math.max(cx, canvas.width - WORLD_WIDTH));
-    cy = Math.min(0, Math.max(cy, canvas.height - WORLD_HEIGHT));
+    // Infinite World: No Clamping
 
     if (shakeIntensity > 0) {
         const dx = (Math.random()-0.5)*shakeIntensity*2;

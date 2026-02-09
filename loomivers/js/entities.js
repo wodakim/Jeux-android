@@ -169,7 +169,7 @@ export class Player {
 
         // Move X
         this.x += moveVec.x * this.speed * speedMult * dt;
-        this.x = Math.max(0, Math.min(WORLD_WIDTH - this.width, this.x));
+        // Infinite World: No clamping
 
         // Collision X
         if (moveVec.x !== 0) {
@@ -185,7 +185,7 @@ export class Player {
 
         // Move Y
         this.y += moveVec.y * this.speed * speedMult * dt;
-        this.y = Math.max(0, Math.min(WORLD_HEIGHT - this.height, this.y));
+        // Infinite World: No clamping
 
         // Collision Y
         if (moveVec.y !== 0) {
