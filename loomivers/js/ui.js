@@ -67,6 +67,10 @@ export const UI = {
         this.drawSelector(ctx, label, ['OFF', 'ON'], value ? 'ON' : 'OFF', x, y, w, h, (val) => onToggle(val === 'ON'));
     },
 
+    registerArea(x, y, w, h, action) {
+        this.buttons.push({ x, y, w, h, action });
+    },
+
     handleInput(input) {
         for (const btn of this.buttons) {
             if (input.checkTap(btn)) {

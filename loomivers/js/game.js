@@ -354,6 +354,27 @@ function updateGame(dt) {
         }
     }
 
+    // Enemy Respawn / Despawn Logic
+    // "5 tiles away" -> Tile is 64px. 5 tiles is 320px.
+    // "Outside screen" -> Screen diagonal/2 + 320.
+    const spawnRadius = Math.sqrt(canvas.width**2 + canvas.height**2)/2 + 320;
+
+    enemyPool.active.forEach(e => {
+        const dx = e.x - player.x;
+        const dy = e.y - player.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist > spawnRadius) {
+            // Respawn closer (just outside view)
+            // "Intelligent" -> In front of player movement? Or random circle?
+            // Random circle at edge of screen is standard for survival games.
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.sqrt(canvas.width**2 + canvas.height**2)/2 + 50;
+            e.x = player.x + Math.cos(angle) * r;
+            e.y = player.y + Math.sin(angle) * r;
+        }
+    });
+
     player.update(dt, input, canvas.width, canvas.height);
     enemyPool.active.forEach(e => e.update(dt));
     projectilePool.active.forEach(p => p.update(dt));
@@ -454,8 +475,23 @@ function render() {
     // Render World Background
     world.render(ctx, cx, cy, canvas.width, canvas.height);
 
-    // World Border
-    ctx.strokeStyle = '#f00'; ctx.lineWidth = 5; ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    // Update Static Objects for collision (based on visible chunks)
+    // Note: This updates the global staticObjects array in entities.js via the World class?
+    // The World class returns objects, we need to update the entities.js export or handle collision differently.
+    // Current architecture imports 'staticObjects' from entities.js.
+    // We should update that array.
+
+    // Actually, updateStaticObjects should probably be called in updateGame, not render.
+    // But since the world is infinite, we need to know camera position.
+    // Camera is calculated here.
+    // Let's pass the static objects to collision logic or update the global array.
+    // Since 'staticObjects' is an exported const array, we can clear and push.
+
+    const visibleObjects = world.updateStaticObjects(cx, cy, canvas.width, canvas.height);
+    // Sync with entities.js staticObjects
+    // Note: staticObjects is imported as const, but it is an array so we can modify it.
+    staticObjects.length = 0;
+    visibleObjects.forEach(o => staticObjects.push(new StaticObject(o.type, o.x, o.y)));
 
     // Entities
     const all = [
@@ -777,18 +813,41 @@ function gameLoop(ts) {
         updateGame(dt); render();
     } else if (currentScene === 'LEVEL_UP') {
         render(); ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        let y=180;
-        activeUpgradeChoices.forEach(c => {
-            UI.drawButton(ctx, "", canvas.width/2-200, y, 400, 80, '#222', ()=>selectUpgrade(c.id));
 
-            const isStat = ['HEAL','MULTISHOT','ATK_SPEED','DMG_UP','SPEED_UP'].includes(c.id);
-            const hasWep = player.weapons.some(w => w.type === c.id);
-            const prefix = (!isStat && !hasWep) ? "NEW! " : (hasWep ? "LVL UP! " : "");
+        ctx.fillStyle='#fff'; ctx.font='40px VT323'; ctx.textAlign='center';
+        ctx.fillText("LEVEL UP!", canvas.width/2, 80);
 
-            ctx.textAlign='left'; ctx.fillStyle='#0ff'; ctx.fillText(prefix + c.title, canvas.width/2-180, y+30);
-            ctx.fillStyle='#ccc'; ctx.fillText(c.desc, canvas.width/2-180, y+60);
-            y+=100;
-        });
+        // Responsive Cards Layout
+        const marginPercent = 0.15; // 15% margin
+        const usableWidth = canvas.width * (1 - 2*marginPercent);
+        const startX = canvas.width * marginPercent;
+        const cardGap = 20;
+
+        // Decide orientation based on aspect ratio
+        const isPortrait = canvas.height > canvas.width;
+
+        if (isPortrait) {
+            // Vertical Layout
+            const cardHeight = (canvas.height - 200) / 3 - cardGap;
+            const cardWidth = usableWidth;
+            let y = 150;
+
+            activeUpgradeChoices.forEach(c => {
+                drawUpgradeCard(ctx, c, startX, y, cardWidth, cardHeight, () => selectUpgrade(c.id));
+                y += cardHeight + cardGap;
+            });
+        } else {
+            // Horizontal Layout
+            const cardWidth = (usableWidth - 2*cardGap) / 3;
+            const cardHeight = canvas.height - 250;
+            let x = startX;
+            let y = 150;
+
+            activeUpgradeChoices.forEach(c => {
+                drawUpgradeCard(ctx, c, x, y, cardWidth, cardHeight, () => selectUpgrade(c.id));
+                x += cardWidth + cardGap;
+            });
+        }
         UI.handleInput(input);
     } else if (currentScene === 'PAUSED') {
         render();
@@ -943,3 +1002,44 @@ window.resumeGame = function() {
     }
     console.log("Game Resumed via Android Lifecycle");
 };
+
+function drawUpgradeCard(ctx, upgrade, x, y, w, h, action) {
+    // Card Background
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x, y, w, h);
+
+    // Pixel Art Border (Double Border)
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(x, y, w, h);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#555';
+    ctx.strokeRect(x+6, y+6, w-12, h-12);
+
+    // Placeholder Icon
+    const iconSize = Math.min(w * 0.3, h * 0.3);
+    const iconX = x + (w - iconSize) / 2;
+    const iconY = y + 20;
+    ctx.fillStyle = '#444';
+    ctx.fillRect(iconX, iconY, iconSize, iconSize);
+    ctx.strokeStyle = '#0ff';
+    ctx.strokeRect(iconX, iconY, iconSize, iconSize);
+    ctx.fillStyle = '#0ff'; ctx.font = '40px VT323'; ctx.textAlign='center';
+    ctx.fillText("?", iconX + iconSize/2, iconY + iconSize/2 + 10);
+
+    // Title
+    const isStat = ['HEAL','MULTISHOT','ATK_SPEED','DMG_UP','SPEED_UP'].includes(upgrade.id);
+    const hasWep = player.weapons.some(w => w.type === upgrade.id);
+    const prefix = (!isStat && !hasWep) ? "NEW! " : (hasWep ? "LVL UP! " : "");
+
+    ctx.fillStyle = '#ff0'; ctx.font = '24px VT323'; ctx.textAlign = 'center';
+    ctx.fillText(prefix + upgrade.title, x + w/2, iconY + iconSize + 30);
+
+    // Description
+    ctx.fillStyle = '#ccc'; ctx.font = '18px VT323';
+    // Wrap text if needed? For now simple
+    ctx.fillText(upgrade.desc, x + w/2, iconY + iconSize + 60);
+
+    // Register Button
+    UI.registerArea(x, y, w, h, action);
+}
