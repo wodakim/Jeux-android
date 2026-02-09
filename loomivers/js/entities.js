@@ -302,6 +302,7 @@ export class Enemy {
         const pCount = GameData.settings.particles === 'High' ? 5 : 2;
         for(let i=0; i<pCount; i++) spawnParticle(this.x, this.y, this.color);
         sceneManager.addScore(this.type === 'TANK' ? 50 : 10);
+        if(sceneManager.recordKill) sceneManager.recordKill(this.type);
 
         if (this.isNemesis) {
             player.gainXp(100);

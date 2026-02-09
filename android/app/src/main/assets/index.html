@@ -1223,13 +1223,13 @@ function render() {
     cx = Math.min(0, Math.max(cx, canvas.width - WORLD_WIDTH));
     cy = Math.min(0, Math.max(cy, canvas.height - WORLD_HEIGHT));
 
-    // Grid (World Relative)
-    ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.beginPath();
-    const gs = 50;
-    const sx = -(cx % gs), sy = -(cy % gs);
-    for (let x = sx; x < canvas.width; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
-    for (let y = sy; y < canvas.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
-    ctx.stroke();
+    // Static Background (Starfield/Points) to avoid grid jitter
+    ctx.fillStyle = '#111';
+    for(let i=0; i<50; i++) {
+        const px = ((i * 12345) % WORLD_WIDTH + cx) % canvas.width;
+        const py = ((i * 67890) % WORLD_HEIGHT + cy) % canvas.height;
+        ctx.fillRect(px < 0 ? px+canvas.width : px, py < 0 ? py+canvas.height : py, 2, 2);
+    }
 
     if (shakeIntensity > 0) {
         const dx = (Math.random()-0.5)*shakeIntensity*2;
@@ -1244,7 +1244,8 @@ function render() {
     }
 
     ctx.save();
-    ctx.translate(cx, cy);
+    // Use Math.floor to fix sub-pixel jitter
+    ctx.translate(Math.floor(cx), Math.floor(cy));
 
     // World Border
     ctx.strokeStyle = '#f00'; ctx.lineWidth = 5; ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -1252,9 +1253,10 @@ function render() {
     // Entities
     const all = [
         { y: player.y + player.height, d: () => {
-            ctx.shadowBlur = 15; ctx.shadowColor = player.color; ctx.fillStyle = player.color;
+            // OPTIMIZATION: Removed ShadowBlur (Costly)
+            ctx.fillStyle = player.color;
             ctx.fillRect(player.x, player.y, player.width, player.height);
-            ctx.shadowBlur = 0; ctx.fillStyle = '#0aa';
+            ctx.fillStyle = '#0aa';
             ctx.fillRect(player.x+player.width, player.y+4, 4, player.height);
             ctx.fillRect(player.x+4, player.y+player.height, player.width, 4);
             if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(player.x, player.y, player.width, player.height); }
@@ -1281,12 +1283,12 @@ function render() {
     all.forEach(x => x.d());
 
     projectilePool.active.forEach(p => {
-        ctx.shadowBlur=10; ctx.shadowColor='#fff'; ctx.fillStyle='#fff';
+        // OPTIMIZATION: Removed ShadowBlur
+        ctx.fillStyle='#fff';
         if(p.type==='NEON_WAND') ctx.fillRect(p.x,p.y,p.width,p.height);
-        else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.shadowColor='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
+        else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
         else if(p.type==='PIXEL_RAIL') { ctx.fillStyle='#0ff'; ctx.fillRect(p.x, p.y, p.width, p.height); }
         else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
-        ctx.shadowBlur=0;
     });
     particlePool.active.forEach(p => { ctx.fillStyle=p.color; ctx.globalAlpha=p.life*2; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha=1; });
     damageTextPool.active.forEach(t => { ctx.globalAlpha=Math.min(1, t.life*2); ctx.fillStyle='#fff'; ctx.font='30px VT323'; ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeText(t.text, t.x, t.y); ctx.fillText(t.text, t.x, t.y); ctx.globalAlpha=1; });
@@ -1318,13 +1320,14 @@ function render() {
         ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fill();
         const kx = input.joystick.originX + input.joystick.x*size;
         const ky = input.joystick.originY + input.joystick.y*size;
-        ctx.fillStyle='rgba(0,255,255,0.8)'; ctx.shadowBlur=10; ctx.shadowColor='#0ff'; ctx.beginPath(); ctx.arc(kx, ky, 25, 0, 6.28); ctx.fill(); ctx.shadowBlur=0;
+        ctx.fillStyle='rgba(0,255,255,0.8)'; ctx.beginPath(); ctx.arc(kx, ky, 25, 0, 6.28); ctx.fill();
     }
 
+    // OPTIMIZATION: Simplified CRT Effect (Vignette only) to avoid heavy fillRect loop
     if (GameData.settings.crtEffect) {
-        ctx.fillStyle = "rgba(0,0,0,0.15)"; for(let i=0; i<canvas.height; i+=4) ctx.fillRect(0,i,canvas.width,2);
+        // Just the vignette for now, scanlines are too heavy for high-res mobile
         const g = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height/3, canvas.width/2, canvas.height/2, canvas.height);
-        g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.6)");
+        g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.4)");
         ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
     }
 
@@ -1356,7 +1359,7 @@ function gameLoop(ts) {
         if (sceneManager.bootTimer > 2) sceneManager.changeScene('TITLE');
     } else if (currentScene === 'TITLE') {
         drawGridBackground(ts * 0.05);
-        ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.shadowBlur=20; ctx.shadowColor='#0ff'; ctx.fillText('LOOMIVERS', canvas.width/2, 100); ctx.shadowBlur=0;
+        ctx.fillStyle = '#0ff'; ctx.font = '80px VT323'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
         ctx.fillStyle = '#fff'; ctx.font = '30px VT323'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
         UI.drawButton(ctx, 'PLAY', canvas.width/2-100, 220, 200, 50, '#0a0', () => sceneManager.changeScene('HUB'));
         UI.drawButton(ctx, 'SETTINGS', canvas.width/2-100, 290, 200, 50, '#333', () => sceneManager.changeScene('SETTINGS'));
