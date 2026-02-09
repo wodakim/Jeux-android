@@ -659,6 +659,43 @@ function gameLoop(ts) {
 
         UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
+    } else if (currentScene === 'SETTINGS') {
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('SETTINGS', canvas.width/2, 50);
+
+        let y = 100;
+
+        UI.drawSlider(ctx, 'MASTER VOLUME', GameData.settings.masterVolume, canvas.width/2 - 150, y, 300, 30, (val) => {
+            GameData.settings.masterVolume = val;
+            GameData.saveSettings();
+        });
+        y += 80;
+
+        UI.drawToggle(ctx, 'CRT EFFECT', GameData.settings.crtEffect, canvas.width/2 - 150, y, 300, 40, (val) => {
+            GameData.settings.crtEffect = val;
+            GameData.saveSettings();
+        });
+        y += 80;
+
+        UI.drawSelector(ctx, 'PARTICLES', ['Low', 'Medium', 'High'], GameData.settings.particles, canvas.width/2 - 150, y, 300, 40, (val) => {
+            GameData.settings.particles = val;
+            GameData.saveSettings();
+        });
+        y += 80;
+
+        UI.drawSelector(ctx, 'JOYSTICK SIDE', ['Left', 'Right'], GameData.settings.joystickSide, canvas.width/2 - 150, y, 300, 40, (val) => {
+            GameData.settings.joystickSide = val;
+            GameData.saveSettings();
+        });
+        y += 80;
+
+        UI.drawSelector(ctx, 'JOYSTICK SIZE', ['Small', 'Medium', 'Large'], GameData.settings.joystickSize, canvas.width/2 - 150, y, 300, 40, (val) => {
+            GameData.settings.joystickSize = val;
+            GameData.saveSettings();
+        });
+
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('TITLE'));
+        UI.handleInput(input);
     }
 
     input.clearTaps();
