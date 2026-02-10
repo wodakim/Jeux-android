@@ -149,11 +149,9 @@ export const sceneManager = {
     },
     onBossDeath() {
         bossSpawned = false;
-        // Resume wave timer or spawn logic if needed immediately,
-        // but updating bossSpawned to false will allow spawnTimer to trigger spawns again in updateGame.
-        // Maybe add some score or visual feedback here too?
+        audioController.setBossMode(false);
         sceneManager.addScore(1000);
-        spawnDamageText("WARDEN DEFEATED!", player.x, player.y - 100);
+        spawnDamageText("BOSS DEFEATED!", player.x, player.y - 100);
     },
     endGame() { endGameLogic(); },
     triggerLevelUpScreen() { triggerLevelUpScreenLogic(); }
@@ -381,8 +379,15 @@ function updateGame(dt) {
             // Custom behavior could be added in Enemy class, but stats suffice for now.
         } else {
             spawnDamageText("WARNING: WARDEN DETECTED", player.x, player.y - 100);
-            enemyPool.get().init('WARDEN', x, y);
+            const boss = enemyPool.get();
+            boss.init('WARDEN', x, y);
+            // Dynamic Difficulty Scaling for Boss
+            // Health scales with game time to keep it challenging
+            const scaleFactor = 1.0 + (gameTime / 300); // +100% HP every 5 mins
+            boss.hp *= scaleFactor;
+            boss.maxHp *= scaleFactor;
         }
+        audioController.setBossMode(true);
     }
 
     if (spawnTimer > spawnRate && !bossSpawned) {
@@ -570,10 +575,17 @@ function render() {
     const all = [
         { y: player.y + player.height, d: () => {
             let spriteKey = 'PLAYER_STAND';
-            if (player.isMoving) {
-                // Animation Cycle: WALK1 -> STAND -> WALK1 -> STAND (User requested removal of WALK2)
-                spriteKey = player.frameIndex === 0 ? 'PLAYER_WALK1' : 'PLAYER_STAND';
+            if (player.state === 'WALK') {
+                spriteKey = `PLAYER_WALK${player.frameIndex}`;
+            } else if (player.state === 'ATTACK') {
+                spriteKey = `PLAYER_ATTACK${player.frameIndex}`;
+            } else if (player.state === 'DEATH') {
+                spriteKey = 'PLAYER_DEATH';
             }
+
+            // Fallback if image missing
+            if (!world.images[spriteKey]) spriteKey = 'PLAYER_STAND';
+
             const img = world.images[spriteKey];
 
             if (img) {
@@ -608,12 +620,45 @@ function render() {
                 ctx.fillStyle='#ff0'; ctx.beginPath();
                 ctx.moveTo(e.x,e.y-10); ctx.lineTo(e.x+5,e.y-2); ctx.lineTo(e.x+10,e.y-10); ctx.lineTo(e.x+15,e.y-2); ctx.lineTo(e.x+20,e.y-10); ctx.lineTo(e.x+20,e.y); ctx.lineTo(e.x,e.y); ctx.fill();
             }
-            ctx.fillStyle = e.flashTimer > 0 ? '#fff' : e.color;
-            ctx.fillRect(e.x, e.y, e.width, e.height);
-            if (e.flashTimer <= 0) {
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.fillRect(e.x+e.width, e.y+4, 4, e.height);
-                ctx.fillRect(e.x+4, e.y+e.height, e.width, 4);
+
+            let baseKey = e.type; // SWARMER, TANK, WARDEN
+            // Map types to keys
+            if (e.type === 'WARDEN') baseKey = 'WARDEN';
+            else if (e.type === 'TANK') baseKey = 'TANK';
+            else if (e.type === 'GLITCH_MITE') baseKey = 'GLITCH_MITE';
+            else if (e.type === 'SWARMER') baseKey = 'SWARMER';
+
+            let action = e.state === 'WALK' ? `WALK${e.frameIndex}` : 'STAND';
+            let key = `${baseKey}_${action}`;
+
+            let img = world.images[key];
+            if (!img) {
+                 // Fallback to stand
+                 key = `${baseKey}_STAND`;
+                 img = world.images[key];
+            }
+
+            if (img) {
+                ctx.save();
+                const cx = Math.floor(e.x + e.width / 2);
+                const cy = Math.floor(e.y + e.height / 2);
+                ctx.translate(cx, cy);
+                if (!e.facingRight) ctx.scale(-1, 1);
+
+                // Draw slightly larger than hitbox
+                const drawW = e.width * 1.5;
+                const drawH = e.height * 1.5;
+
+                if (e.flashTimer > 0) {
+                     ctx.globalCompositeOperation = 'lighter';
+                     ctx.globalAlpha = 0.8;
+                }
+
+                ctx.drawImage(img, -drawW/2, -drawH/2 - 5, drawW, drawH);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = e.flashTimer > 0 ? '#fff' : e.color;
+                ctx.fillRect(e.x, e.y, e.width, e.height);
             }
         }})),
         ...gemPool.active.map(g => ({ y: g.y + g.height, d: () => {
@@ -655,54 +700,65 @@ function render() {
 
     if (player.overdriveActive || player.iframeTimer > 0.3) ctx.globalCompositeOperation = 'source-over';
 
-    // HUD
+    // HUD Layout
+    const hudPadding = 20;
+
+    // Top Left: Stats
     ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '24px monospace';
-    ctx.fillText(`SCORE: ${score}`, 20, 40);
-    ctx.fillText(`TIME: ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, 20, 70);
-    ctx.fillText(`LVL: ${player.level}`, 20, 100);
+    ctx.fillText(`SCORE: ${score}`, hudPadding, 40);
+    ctx.fillText(`TIME:  ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, hudPadding, 70);
+    ctx.fillText(`LVL:   ${player.level}`, hudPadding, 100);
 
     if (GameData.settings.hardcore) {
-        ctx.fillStyle = '#f00'; ctx.fillText("HARDCORE", 20, 130);
+        ctx.fillStyle = '#f00'; ctx.fillText("HARDCORE", hudPadding, 130);
     }
 
-    // Combo UI
+    // Top Right: Combo
     if (comboCount > 5) {
         ctx.save();
         ctx.textAlign = 'right';
         ctx.font = `${30 + Math.min(20, comboCount/2)}px monospace`;
         ctx.fillStyle = `hsl(${Date.now() % 360}, 100%, 70%)`;
-        ctx.fillText(`${comboCount} HITS!`, canvas.width - 20, 80);
+        ctx.fillText(`${comboCount} HITS!`, canvas.width - hudPadding, 50);
 
         // Combo Timer Bar
-        ctx.fillStyle = '#fff'; ctx.fillRect(canvas.width - 120, 90, 100, 5);
-        ctx.fillStyle = '#ff0'; ctx.fillRect(canvas.width - 120, 90, 100 * (Math.max(0, comboTimer)/3.0), 5);
+        const cbW = 150;
+        ctx.fillStyle = '#fff'; ctx.fillRect(canvas.width - cbW - hudPadding, 60, cbW, 5);
+        ctx.fillStyle = '#ff0'; ctx.fillRect(canvas.width - cbW - hudPadding, 60, cbW * (Math.max(0, comboTimer)/3.0), 5);
         ctx.restore();
     }
 
-    // Boss HP
+    // Top Center: Boss HP (if active)
     if (bossSpawned) {
         const warden = enemyPool.active.find(e => e.type === 'WARDEN');
         if (warden) {
-            const bbw = canvas.width * 0.6;
+            const bbw = Math.min(400, canvas.width * 0.5);
             const bbx = (canvas.width - bbw) / 2;
-            const bby = 80;
-            ctx.fillStyle = '#333'; ctx.fillRect(bbx, bby, bbw, 30);
-            ctx.fillStyle = '#f0f'; ctx.fillRect(bbx, bby, bbw * (Math.max(0, warden.hp) / warden.maxHp), 30);
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bbx, bby, bbw, 30);
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '24px monospace';
-            ctx.fillText("THE WARDEN", canvas.width / 2, bby + 22);
+            const bby = 60;
+            ctx.fillStyle = '#333'; ctx.fillRect(bbx, bby, bbw, 20);
+            ctx.fillStyle = '#f0f'; ctx.fillRect(bbx, bby, bbw * (Math.max(0, warden.hp) / warden.maxHp), 20);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bbx, bby, bbw, 20);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '16px monospace';
+            ctx.fillText("BOSS", canvas.width / 2, bby + 15);
         }
     }
 
-    // HP
-    const bw = 200, bx = (canvas.width-bw)/2, by = canvas.height-40;
-    ctx.fillStyle = '#333'; ctx.fillRect(bx, by, bw, 20);
-    ctx.fillStyle = '#0f0'; ctx.fillRect(bx, by, bw*(Math.max(0,player.hp)/player.maxHp), 20);
-    ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by, bw, 20);
+    // Bottom Center: Player HP
+    const bw = 300, bx = (canvas.width-bw)/2, by = canvas.height-30;
+    // Background
+    ctx.fillStyle = '#222'; ctx.fillRect(bx, by, bw, 20);
+    // Fill
+    ctx.fillStyle = player.hp < player.maxHp * 0.3 ? '#f00' : '#0f0'; // Red if low
+    ctx.fillRect(bx, by, bw*(Math.max(0,player.hp)/player.maxHp), 20);
+    // Border
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, 20);
+    // Text overlay
+    ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.font='14px monospace';
+    ctx.fillText(`${Math.ceil(player.hp)} / ${Math.floor(player.maxHp)}`, canvas.width/2, by + 15);
 
-    // XP
-    ctx.fillStyle='#333'; ctx.fillRect(0,0,canvas.width,5);
-    ctx.fillStyle='#ff0'; ctx.fillRect(0,0,canvas.width*(player.xp/player.nextLevelXp),5);
+    // Bottom Edge: XP Bar
+    ctx.fillStyle='#333'; ctx.fillRect(0, canvas.height-5, canvas.width, 5);
+    ctx.fillStyle='#0ff'; ctx.fillRect(0, canvas.height-5, canvas.width*(player.xp/player.nextLevelXp), 5);
 
     // Joystick
     if (input.joystick.active) {

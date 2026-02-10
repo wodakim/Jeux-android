@@ -59,7 +59,8 @@ export class Player {
         this.animTimer = 0;
         this.isMoving = false;
         this.facingRight = true;
-        this.frameIndex = 0;
+        this.frameIndex = 1; // 1-3 for walking
+        this.state = 'STAND';
 
         // Overdrive
         this.glitchMeter = 0;
@@ -180,14 +181,18 @@ export class Player {
             this.facingRight = moveVec.x > 0;
         }
 
+        // Animation Update
+        this.animTimer += dt;
         if (this.isMoving) {
-            this.animTimer += dt;
-            if (this.animTimer > 0.15) { // Walk speed
+            this.state = 'WALK';
+            if (this.animTimer > 0.15) {
                 this.animTimer = 0;
-                this.frameIndex = (this.frameIndex + 1) % 2; // Toggle between walk 1 and 2
+                this.frameIndex++;
+                if (this.frameIndex > 3) this.frameIndex = 1;
             }
         } else {
-            this.frameIndex = 0;
+            this.state = 'STAND';
+            this.frameIndex = 1;
         }
 
         // Move X
@@ -292,6 +297,12 @@ export class Enemy {
         this.color = '#f00';
         this.knockbackX = 0; this.knockbackY = 0;
         this.attackTimer = 0;
+
+        // Anim
+        this.animTimer = 0;
+        this.frameIndex = 1;
+        this.state = 'STAND';
+        this.facingRight = true;
     }
 
     init(type, x, y) {
@@ -300,6 +311,8 @@ export class Enemy {
         this.type = type;
         this.knockbackX = 0; this.knockbackY = 0;
         this.flashTimer = 0; this.attackTimer = 0;
+        this.frameIndex = 1;
+        this.state = 'WALK'; // Default state for enemies
 
         if (type === 'SWARMER') {
             this.width = 15; this.height = 15;
@@ -415,11 +428,23 @@ export class Enemy {
                 }
             }
 
+            // Animation Update for Enemies
+            this.animTimer += dt;
+            if (this.animTimer > 0.2) {
+                this.animTimer = 0;
+                this.frameIndex++;
+                if (this.frameIndex > 3) this.frameIndex = 1;
+            }
+            if (moveX > 0) this.facingRight = true;
+            else if (moveX < 0) this.facingRight = false;
+
+
             if (this.type === 'WARDEN') {
                 this.attackTimer += dt;
                 const attackRate = (this.hp < this.maxHp * 0.5) ? 1.0 : 2.0;
                 if (this.attackTimer > attackRate) {
                     this.attackTimer = 0;
+                    // Trigger Attack Animation state here if we had logic for it
                     for (let i = -1; i <= 1; i++) {
                         projectilePool.get().init('BOSS_ORB', this.x + this.width/2, this.y + this.height/2, player.x + (i*50), player.y + (i*50), 20, true);
                     }

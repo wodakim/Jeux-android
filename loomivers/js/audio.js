@@ -4,6 +4,10 @@ export class AudioController {
     constructor() {
         this.initialized = false;
         this.audioCtx = null;
+        this.bgmOsc = null;
+        this.bgmGain = null;
+        this.bgmLfo = null;
+        this.isBossMode = false;
     }
 
     init() {
@@ -24,8 +28,64 @@ export class AudioController {
                 this.audioCtx.resume();
             }
             this.initialized = true;
+            this.playBgm();
         } catch (e) {
             console.warn("AudioContext init failed", e);
+        }
+    }
+
+    playBgm() {
+        if (!this.audioCtx) return;
+
+        const vol = GameData.settings.masterVolume;
+        if (vol <= 0) return;
+
+        // Base Drone
+        this.bgmOsc = this.audioCtx.createOscillator();
+        this.bgmGain = this.audioCtx.createGain();
+        this.bgmOsc.type = 'sawtooth'; // Grittier sound
+        this.bgmOsc.frequency.value = 55; // A1 (Low Drone)
+
+        // Low Pass Filter for that "muffled" space sound
+        this.bgmFilter = this.audioCtx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 400;
+
+        // LFO for movement
+        this.bgmLfo = this.audioCtx.createOscillator();
+        this.bgmLfoGain = this.audioCtx.createGain();
+        this.bgmLfo.frequency.value = 0.2; // Slow pulse
+        this.bgmLfoGain.gain.value = 100;
+
+        // Connections
+        this.bgmLfo.connect(this.bgmLfoGain);
+        this.bgmLfoGain.connect(this.bgmFilter.frequency); // Modulate filter cutoff
+
+        this.bgmOsc.connect(this.bgmFilter);
+        this.bgmFilter.connect(this.bgmGain);
+        this.bgmGain.connect(this.audioCtx.destination);
+
+        this.bgmGain.gain.setValueAtTime(0.05 * vol, this.audioCtx.currentTime);
+
+        this.bgmOsc.start();
+        this.bgmLfo.start();
+    }
+
+    setBossMode(active) {
+        if (!this.initialized || !this.bgmOsc) return;
+        this.isBossMode = active;
+        const now = this.audioCtx.currentTime;
+
+        if (active) {
+            // Boss Mode: Faster, higher pitch, more intense
+            this.bgmOsc.frequency.linearRampToValueAtTime(110, now + 2); // A2
+            this.bgmLfo.frequency.linearRampToValueAtTime(4.0, now + 2); // Fast pulse
+            this.bgmGain.gain.linearRampToValueAtTime(0.08 * GameData.settings.masterVolume, now + 2);
+        } else {
+            // Normal Mode: Slow, deep
+            this.bgmOsc.frequency.linearRampToValueAtTime(55, now + 2); // A1
+            this.bgmLfo.frequency.linearRampToValueAtTime(0.2, now + 2); // Slow pulse
+            this.bgmGain.gain.linearRampToValueAtTime(0.05 * GameData.settings.masterVolume, now + 2);
         }
     }
 
