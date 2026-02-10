@@ -2,8 +2,8 @@ import { GameData } from './utils.js';
 import { UI } from './ui.js';
 import { audioController } from './audio.js';
 import { world } from './world.js';
-import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject } from './entities.js';
-import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
+import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone } from './entities.js';
+import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT, PASSIVES, CORRUPTED_ARTIFACTS, EVOLUTIONS } from './constants.js';
 
 // --- GAME LOGIC ---
 const canvas = document.getElementById('gameCanvas');
@@ -23,6 +23,8 @@ let shakeIntensity = 0;
 let storyY = 0;
 let activeUpgradeChoices = [];
 let selectedCharacter = 'WEAVER';
+let comboCount = 0;
+let comboTimer = 0;
 
 // Input Handler
 class InputHandler {
@@ -138,6 +140,12 @@ export const sceneManager = {
         if (!GameData.progress.bestiary[type]) GameData.progress.bestiary[type] = 0;
         GameData.progress.bestiary[type]++;
         GameData.saveProgress();
+
+        // Combo Logic
+        comboCount++;
+        comboTimer = 3.0;
+        // XP Multiplier based on combo? Not implemented yet, just visual flair first.
+        if (comboCount % 10 === 0) spawnDamageText(`COMBO x${comboCount}!`, player.x, player.y - 40, true);
     },
     onBossDeath() {
         bossSpawned = false;
@@ -175,18 +183,17 @@ window.fireWeaponGlobal = function(p, w) {
     const dmg = w.damage * p.damageMult;
     const count = w.projectiles || 1;
 
-    if (w.type === 'NEON_WAND') {
+    if (w.type === 'NEON_WAND' || w.type === 'HOLY_BEAM') {
         if (nearest && minDist < 400*400) {
             for(let i=0; i<count; i++) {
                 const spread = (i - (count-1)/2) * 20;
-                // Target center of enemy
                 const tx = nearest.x + nearest.width/2 + spread;
                 const ty = nearest.y + nearest.height/2 + spread;
-                projectilePool.get().init('NEON_WAND', pCx, pCy, tx, ty, dmg);
+                projectilePool.get().init(w.type, pCx, pCy, tx, ty, dmg);
             }
             w.cooldown = w.fireRate * p.fireRateMult;
         }
-    } else if (w.type === 'GLITCH_BOMB') {
+    } else if (w.type === 'GLITCH_BOMB' || w.type === 'CLUSTER_BOMB') {
         for(let i=0; i<count; i++) {
             let tx, ty;
             if (enemyPool.active.length > 0) {
@@ -196,12 +203,11 @@ window.fireWeaponGlobal = function(p, w) {
                 const a = Math.random() * Math.PI * 2;
                 tx = pCx + Math.cos(a)*200; ty = pCy + Math.sin(a)*200;
             }
-            projectilePool.get().init('GLITCH_BOMB', pCx, pCy, tx, ty, dmg);
+            projectilePool.get().init(w.type, pCx, pCy, tx, ty, dmg);
         }
         w.cooldown = w.fireRate * p.fireRateMult;
-    } else if (w.type === 'PIXEL_RAIL') {
+    } else if (w.type === 'PIXEL_RAIL' || w.type === 'RAIL_TURRET') {
         if (nearest) {
-            // Shoots straight at nearest, infinite speed/ray essentially but implemented as fast projectile
             projectilePool.get().init('PIXEL_RAIL', pCx, pCy, nearest.x + nearest.width/2, nearest.y + nearest.height/2, dmg);
             w.cooldown = w.fireRate * p.fireRateMult;
         }
@@ -243,33 +249,76 @@ function endGameLogic() {
 function triggerLevelUpScreenLogic() {
     sceneManager.changeScene('LEVEL_UP');
     input.clearTaps();
-    const possibleUpgrades = [
-        { id: 'NEON_WAND', title: 'Neon Wand', desc: 'New Weapon / +Damage' },
-        { id: 'DATA_ORBIT', title: 'Data Orbit', desc: 'New Weapon / +Speed' },
-        { id: 'GLITCH_BOMB', title: 'Glitch Bomb', desc: 'New Weapon / +Damage' },
-        { id: 'PIXEL_RAIL', title: 'Pixel Rail', desc: 'New Weapon / High Dmg' },
-        { id: 'VOID_AXE', title: 'Void Axe', desc: 'New Weapon / Penetrating' },
-        { id: 'FORCE_FIELD', title: 'Force Field', desc: 'New Weapon / Area' },
-        { id: 'HEAL', title: 'System Repair', desc: 'Heal 50 HP' },
-        { id: 'MULTISHOT', title: 'Multishot', desc: '+1 Projectile to All' },
-        { id: 'ATK_SPEED', title: 'Overclock', desc: '+20% Fire Rate' },
-        { id: 'DMG_UP', title: 'Power Surge', desc: '+20% Global Damage' },
-        { id: 'SPEED_UP', title: 'Dash Module', desc: '+10% Move Speed' }
-    ];
+
+    // Check Evolutions First (Priority)
+    for (const w of player.weapons) {
+        if (w.level >= 8 && !w.evolved && EVOLUTIONS[w.type]) {
+            const evo = EVOLUTIONS[w.type];
+            const hasPassive = player.passives.some(p => p.id === evo.passive);
+            if (hasPassive) {
+                // Guarantee Evolution
+                activeUpgradeChoices = [{
+                    id: evo.result,
+                    title: `EVOLUTION: ${evo.name}`,
+                    desc: 'Weapon Evolved!',
+                    isEvolution: true,
+                    baseId: w.type
+                }];
+                return;
+            }
+        }
+    }
+
+    const pool = [];
+
+    // Weapons (New or Upgrade)
+    const weaponTypes = ['NEON_WAND', 'DATA_ORBIT', 'GLITCH_BOMB', 'PIXEL_RAIL', 'VOID_AXE', 'FORCE_FIELD'];
+    weaponTypes.forEach(t => {
+        const existing = player.weapons.find(w => w.type === t);
+        if (!existing) pool.push({ id: t, title: t.replace('_', ' '), desc: 'New Weapon' });
+        else if (existing.level < 8) pool.push({ id: t, title: t.replace('_', ' '), desc: `Level Up (Lvl ${existing.level+1})` });
+    });
+
+    // Passives
+    PASSIVES.forEach(p => {
+        pool.push({ id: p.id, title: p.name, desc: p.desc, isPassive: true });
+    });
+
+    // Corrupted Artifacts (Small chance)
+    if (Math.random() < 0.2) {
+         CORRUPTED_ARTIFACTS.forEach(a => pool.push({ id: a.id, title: `CURSED: ${a.name}`, desc: a.desc, isPassive: true }));
+    }
+
+    // Heal (Always available fallback)
+    pool.push({ id: 'HEAL', title: 'System Repair', desc: 'Heal 50 HP' });
+
     activeUpgradeChoices = [];
-    while(activeUpgradeChoices.length < 3) {
-        const pick = possibleUpgrades[Math.floor(Math.random() * possibleUpgrades.length)];
-        if (!activeUpgradeChoices.includes(pick)) activeUpgradeChoices.push(pick);
+    while(activeUpgradeChoices.length < 3 && pool.length > 0) {
+        const idx = Math.floor(Math.random() * pool.length);
+        const pick = pool[idx];
+        if (!activeUpgradeChoices.some(c => c.id === pick.id)) activeUpgradeChoices.push(pick);
     }
 }
 
 function selectUpgrade(id) {
-    if (id === 'HEAL') player.hp = Math.min(player.maxHp, player.hp + 50);
-    else if (id === 'MULTISHOT') player.weapons.forEach(w => w.projectiles = (w.projectiles || 1) + 1);
-    else if (id === 'ATK_SPEED') player.fireRateMult *= 0.8;
-    else if (id === 'DMG_UP') player.damageMult *= 1.2;
-    else if (id === 'SPEED_UP') player.speed *= 1.1;
-    else {
+    const choice = activeUpgradeChoices.find(c => c.id === id);
+
+    if (choice && choice.isEvolution) {
+        const baseW = player.weapons.find(w => w.type === choice.baseId);
+        if (baseW) {
+            baseW.type = id; // Transform weapon type
+            baseW.evolved = true;
+            baseW.damage *= 2; // Simple buff
+            baseW.cooldown *= 0.5;
+            sceneManager.addShake(50);
+            spawnDamageText("EVOLUTION!", player.x, player.y - 50, true);
+        }
+    } else if (choice && choice.isPassive) {
+        if (id === 'DRONE_MODULE') player.addDrone();
+        else player.addPassive(id);
+    } else if (id === 'HEAL') {
+        player.hp = Math.min(player.maxHp, player.hp + 50);
+    } else {
         const existing = player.weapons.find(w => w.type === id);
         if (existing) {
             existing.level++;
@@ -279,6 +328,7 @@ function selectUpgrade(id) {
             player.addWeapon(id);
         }
     }
+
     sceneManager.changeScene('PLAYING');
     lastTime = performance.now();
     requestAnimationFrame(gameLoop);
@@ -287,8 +337,16 @@ function selectUpgrade(id) {
 function startGame() {
     score = 0; gameTime = 0; spawnTimer = 0; waveTimer = 0;
     bossSpawned = false; nextBossTime = 300; nemesisSpawned = false;
+    comboCount = 0; comboTimer = 0;
 
     player.reset(selectedCharacter);
+
+    // Hardcore Mode
+    if (GameData.settings.hardcore) {
+        player.maxHp = 1;
+        player.hp = 1;
+    }
+
     enemyPool.reset(); projectilePool.reset(); gemPool.reset(); particlePool.reset(); damageTextPool.reset();
 
     sceneManager.changeScene('PLAYING');
@@ -298,6 +356,10 @@ function startGame() {
 
 function updateGame(dt) {
     gameTime += dt; spawnTimer += dt; waveTimer += dt;
+    if (comboCount > 0) {
+        comboTimer -= dt;
+        if (comboTimer <= 0) comboCount = 0;
+    }
     const diffMult = 1.0 + (corruptionLevel * 0.1);
     const spawnRate = Math.max(0.2, (1.5 - (gameTime / 60) * 0.1) / diffMult);
 
@@ -424,8 +486,12 @@ function updateGame(dt) {
                         projectilePool.release(p);
                         break;
                     }
-                    else if (p.type === 'GLITCH_BOMB') {
-                        createExplosion(p.x, p.y, p.damage); // Explosion handles its own damage logic
+                    else if (p.type === 'HOLY_BEAM') {
+                        e.takeDamage(dmg, 100, p.x, p.y, isCrit);
+                        // Penetrates
+                    }
+                    else if (p.type === 'GLITCH_BOMB' || p.type === 'CLUSTER_BOMB') {
+                        createExplosion(p.x, p.y, p.damage, p.type === 'CLUSTER_BOMB' ? 200 : 100);
                         projectilePool.release(p);
                         break;
                     }
@@ -594,6 +660,24 @@ function render() {
     ctx.fillText(`SCORE: ${score}`, 20, 40);
     ctx.fillText(`TIME: ${Math.floor(gameTime/60)}:${(Math.floor(gameTime%60)+"").padStart(2,'0')}`, 20, 70);
     ctx.fillText(`LVL: ${player.level}`, 20, 100);
+
+    if (GameData.settings.hardcore) {
+        ctx.fillStyle = '#f00'; ctx.fillText("HARDCORE", 20, 130);
+    }
+
+    // Combo UI
+    if (comboCount > 5) {
+        ctx.save();
+        ctx.textAlign = 'right';
+        ctx.font = `${30 + Math.min(20, comboCount/2)}px monospace`;
+        ctx.fillStyle = `hsl(${Date.now() % 360}, 100%, 70%)`;
+        ctx.fillText(`${comboCount} HITS!`, canvas.width - 20, 80);
+
+        // Combo Timer Bar
+        ctx.fillStyle = '#fff'; ctx.fillRect(canvas.width - 120, 90, 100, 5);
+        ctx.fillStyle = '#ff0'; ctx.fillRect(canvas.width - 120, 90, 100 * (Math.max(0, comboTimer)/3.0), 5);
+        ctx.restore();
+    }
 
     // Boss HP
     if (bossSpawned) {
@@ -976,6 +1060,12 @@ function gameLoop(ts) {
 
         UI.drawSelector(ctx, 'JOYSTICK SIZE', ['Small', 'Medium', 'Large'], GameData.settings.joystickSize, canvas.width/2 - 150, y, 300, 40, (val) => {
             GameData.settings.joystickSize = val;
+            GameData.saveSettings();
+        });
+        y += 80;
+
+        UI.drawToggle(ctx, 'HARDCORE MODE (1 HP)', GameData.settings.hardcore, canvas.width/2 - 150, y, 300, 40, (val) => {
+            GameData.settings.hardcore = val;
             GameData.saveSettings();
         });
 

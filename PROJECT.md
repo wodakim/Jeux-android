@@ -55,7 +55,7 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
     *   Fixed hitbox alignment issues by centering sprite rendering.
     *   Implemented debounced input handling for UI buttons.
 
-### V7: Infinite Map & Boss Rework (Current Stable)
+### V7: Infinite Map & Boss Rework
 *   **Infinite Map:**
     *   Procedural Chunk Generation (`world.js`) with Perlin-like noise for terrain (Grass, Path, Obstacles).
     *   **Optimization:** Strictly limits rendering to 2 chunks around the player based on screen size (Culling).
@@ -71,6 +71,20 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
     *   **Offline:** Removed external Google Fonts (`VT323`) in favor of system `monospace` to fix "Internet Error" crashes.
     *   **Credits:** Updated to reflect "Created by Montano Mickael, Founder of Logoloom".
 
+### V8: The Evolution Update (Current Stable)
+*   **Gameplay Systems:**
+    *   **Combo Logic:** Kill streaks trigger a visual "COMBO xN" display and multiplier.
+    *   **Hardcore Mode:** New setting (Title Screen Toggle) that caps Max HP at 1 for the ultimate challenge.
+*   **Content:**
+    *   **Drone Companion:** New entity that orbits the player and fires automatically at nearest enemies. Unlocked via "Drone Core" upgrade.
+    *   **Passive Items:** Added `Spinach`, `Empty Tome`, `Wings`, `Armor` to the level-up pool.
+    *   **Corrupted Artifacts:** Rare upgrades with massive buffs and curses (e.g., `Cursed Heart`: +50% Dmg / -50 HP).
+    *   **Weapon Evolutions:**
+        *   **Holy Beam:** Evolved from `Neon Wand` + `Empty Tome`. Fires piercing high-speed projectiles.
+        *   **Cluster Bomb:** Evolved from `Glitch Bomb` + `Spinach`. Explodes into sub-munitions.
+        *   **Storm Orbit:** Evolved from `Data Orbit` + `Wings`. Increased rotation speed.
+        *   **Rail Turret:** Evolved from `Pixel Rail` + `Drone Core`.
+
 ## Roadmap / Remaining Work
 
 ### Essential Polish (Current Backlog)
@@ -78,13 +92,6 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 *   [ ] **Audio:** Add distinct music track for Boss encounters.
 *   [ ] **Balance:** Tune "Corruptor" HP scaling based on player feedback (currently 5x base).
 *   [ ] **Input:** Add "Hold to Auto-Buy" in Shop for better UX when spending lots of Fragments.
-
-### Potential Features (Waiting Approval)
-*   **Corrupted Artifacts:** Passive items with strong buffs but curses (e.g., +50% Dmg, -20% HP).
-*   **Weapon Evolution:** Merging Level 8 Weapon + Passive Item -> Legendary Weapon.
-*   **Combo Counter:** Visual streak for kills without taking damage (XP Multiplier reward).
-*   **Drone Companion:** A pet that auto-collects XP or fires weak shots.
-*   **Hardcore Mode:** Separate leaderboard for "One Hit Death" runs.
 
 ## Technical Constraints
 1.  **Single File:** All code/css/html in `index.html` (except font imports).

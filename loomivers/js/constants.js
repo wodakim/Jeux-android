@@ -34,6 +34,27 @@ export const DefaultGameData = {
         crtEffect: true,
         particles: 'High',
         joystickSide: 'Left',
-        joystickSize: 'Medium'
+        joystickSize: 'Medium',
+        hardcore: false
     }
+};
+
+export const PASSIVES = [
+    { id: 'MIGHT', name: 'Spinach', desc: '+10% Damage' },
+    { id: 'HASTE', name: 'Empty Tome', desc: '-10% Cooldown' },
+    { id: 'SPEED', name: 'Wings', desc: '+20 Speed' },
+    { id: 'ARMOR', name: 'Armor', desc: '+20 Max HP' },
+    { id: 'DRONE_MODULE', name: 'Drone Core', desc: 'Adds a Companion Drone' }
+];
+
+export const CORRUPTED_ARTIFACTS = [
+    { id: 'CURSED_HEART', name: 'Cursed Heart', desc: '+50% DMG, -50 Max HP', weight: 0.1 },
+    { id: 'GLASS_CANNON', name: 'Glass Cannon', desc: '+100% DMG, HP = 1', weight: 0.05 }
+];
+
+export const EVOLUTIONS = {
+    'NEON_WAND': { passive: 'HASTE', result: 'HOLY_BEAM', name: 'Holy Beam' },
+    'DATA_ORBIT': { passive: 'SPEED', result: 'STORM_ORBIT', name: 'Storm Orbit' },
+    'GLITCH_BOMB': { passive: 'MIGHT', result: 'CLUSTER_BOMB', name: 'Cluster Bomb' },
+    'PIXEL_RAIL': { passive: 'DRONE_MODULE', result: 'RAIL_TURRET', name: 'Rail Turret' }
 };

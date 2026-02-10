@@ -48,6 +48,8 @@ export class Player {
         this.nextLevelXp = 10;
         this.level = 1;
         this.weapons = []; // Array of weapon config objects
+        this.passives = []; // Array of {id, level}
+        this.drones = []; // Array of Drone objects
         this.iframeTimer = 0;
         this.color = '#0ff';
         this.damageMult = 1.0;
@@ -86,6 +88,8 @@ export class Player {
         this.level = 1;
         this.iframeTimer = 0;
         this.weapons = [];
+        this.passives = [];
+        this.drones = [];
         this.fireRateMult = 1.0;
 
         this.glitchMeter = 0;
@@ -106,11 +110,30 @@ export class Player {
         }
     }
 
+    addPassive(id) {
+        const existing = this.passives.find(p => p.id === id);
+        if (existing) existing.level++;
+        else this.passives.push({ id: id, level: 1 });
+
+        // Apply Passive Effects
+        if (id === 'MIGHT') this.damageMult += 0.1;
+        else if (id === 'HASTE') this.fireRateMult *= 0.9;
+        else if (id === 'SPEED') this.speed += 20;
+        else if (id === 'ARMOR') this.maxHp += 20; this.hp += 20;
+        else if (id === 'CURSED_HEART') { this.maxHp -= 50; this.damageMult += 0.5; this.hp = Math.min(this.hp, this.maxHp); }
+        else if (id === 'GLASS_CANNON') { this.maxHp = 1; this.damageMult += 1.0; this.hp = 1; }
+    }
+
+    addDrone() {
+        this.drones.push(new Drone(this.drones.length));
+    }
+
     addWeapon(type) {
         const weaponConfig = {
             type: type,
             cooldown: 0,
-            level: 1
+            level: 1,
+            evolved: false
         };
 
         if (type === 'NEON_WAND') {
@@ -206,6 +229,8 @@ export class Player {
         this.weapons.forEach(w => {
             if (w.type === 'DATA_ORBIT') {
                 w.angle += 3 * dt * fireRateMult;
+            } else if (w.type === 'STORM_ORBIT') {
+                w.angle += 8 * dt * fireRateMult; // Much faster
             } else {
                 w.cooldown -= dt * fireRateMult;
                 if (w.cooldown <= 0) {
@@ -213,6 +238,8 @@ export class Player {
                 }
             }
         });
+
+        this.drones.forEach(d => d.update(dt, this));
     }
 
     fireWeapon(w) {
@@ -484,7 +511,13 @@ export class Projectile {
             this.width = 8; this.height = 8;
             const speed = 400;
             this.vx = dirX * speed; this.vy = dirY * speed;
-        } else if (type === 'GLITCH_BOMB') {
+        } else if (type === 'HOLY_BEAM') {
+            this.width = 12; this.height = 12;
+            const speed = 600;
+            this.vx = dirX * speed; this.vy = dirY * speed;
+            this.penetrate = true; // Penetrates enemies
+            this.duration = 2.0;
+        } else if (type === 'GLITCH_BOMB' || type === 'CLUSTER_BOMB') {
             this.width = 16; this.height = 16;
             const speed = 200;
             this.vx = dirX * speed; this.vy = dirY * speed;
@@ -580,3 +613,36 @@ export const damageTextPool = new ObjectPool(() => new DamageText(), 50);
 export function spawnGem(x, y, value, isData = false) { gemPool.get().init(x, y, value, isData); }
 export function spawnParticle(x, y, color) { particlePool.get().init(x, y, color); }
 export function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.get().init(amount, x, y, isCrit); }
+
+// DRONE COMPANION
+export class Drone {
+    constructor(index) {
+        this.index = index;
+        this.angle = (index * Math.PI * 2) / 3; // Spread out if multiple
+        this.distance = 50;
+        this.cooldown = 0;
+        this.fireRate = 1.0;
+        this.x = 0;
+        this.y = 0;
+    }
+
+    update(dt, player) {
+        this.angle += dt;
+        this.x = player.x + player.width/2 + Math.cos(this.angle) * this.distance - 4;
+        this.y = player.y + player.height/2 + Math.sin(this.angle) * this.distance - 4;
+
+        this.cooldown -= dt;
+        if (this.cooldown <= 0) {
+            // Auto fire weak shot
+            let nearest = null, minDist = 300;
+            for (const e of enemyPool.active) {
+                const d = Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2);
+                if (d < minDist) { minDist = d; nearest = e; }
+            }
+            if (nearest) {
+                projectilePool.get().init('NEON_WAND', this.x, this.y, nearest.x+nearest.width/2, nearest.y+nearest.height/2, 5);
+                this.cooldown = this.fireRate;
+            }
+        }
+    }
+}
