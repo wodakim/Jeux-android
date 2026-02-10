@@ -3,6 +3,20 @@
 ## Overview
 LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimized for Android WebView. It features a retro "Voxel/Glitch" aesthetic, persistent meta-progression, and specific mobile optimizations.
 
+## HOW TO UPDATE ASSETS (IMPORTANT!)
+The game does NOT load `.png` files directly. It uses encoded Base64 strings embedded in the code for performance and single-file portability.
+
+**Whenever you change a PNG file in the `assets/` folder, you MUST run the update script:**
+
+```bash
+python3 update_game.py
+```
+
+This script will:
+1.  Read all PNGs in `loomivers/assets/`.
+2.  Convert them to Base64 code in `loomivers/js/assets_data.js`.
+3.  Bundle everything into `loomivers_final.html`.
+
 ## Development History (Changelog)
 
 ### V1-V6: Foundations
@@ -61,3 +75,4 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 *   `generate_placeholders.py`: Creates dummy assets.
 *   `process_sprites.py`: Compiles PNGs to `assets_data.js`.
 *   `bundle.py`: Build script -> `loomivers_final.html`.
+*   `update_game.py`: One-click script to process assets and bundle the game.
