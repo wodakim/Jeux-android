@@ -21,7 +21,8 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 ### V9: Polish & Assets (Current Stable)
 *   **Asset Pipeline:**
     *   Migrated to a directory-based asset structure (`loomivers/assets/`).
-    *   Implemented `generate_placeholders.py` to create standard placeholder sprites.
+    *   Added placeholders for **everything**: Map Tiles, Decor, Items, UI Icons, Projectiles, and all Entities.
+    *   Implemented `generate_placeholders.py` to create standard sprite templates.
     *   Implemented `process_sprites.py` to bake assets into `assets_data.js` as Base64.
 *   **Animations:**
     *   Added support for 3-frame walk cycles (Walk1-3) and Attack states in `entities.js`.
@@ -39,6 +40,13 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 *   [ ] **Audio:** Add distinct sound effects for new weapons (Evolutions).
 *   [ ] **Input:** Add "Hold to Auto-Buy" in Shop.
 
+### Proposed V10 Features
+1.  **Pet Evolution:** Upgrade the basic Drone into specialized types (Healer, Gunner, Looter) via further upgrades.
+2.  **Challenge Rooms:** Spawn portal gates that lead to small timed arenas with specific modifiers (e.g., "No Weapons, only Dash").
+3.  **Daily Run:** A fixed seed run with a specific character/loadout, refreshing every 24h, with its own leaderboard.
+4.  **Bestiary 2.0:** Expand the Archives to include detailed stats, lore text, and a rotatable model viewer for each enemy.
+5.  **Secret Boss (The Architect):** A hidden boss that only spawns if you perform a specific ritual or reach a glitched area of the map.
+
 ## Technical Constraints
 1.  **Single File:** All code/css/html in `index.html` (except font imports).
 2.  **No External Assets:** Procedural Canvas drawing only (or Base64).
@@ -48,7 +56,8 @@ LOOMIVERS is a single-file HTML5 survival game (Vampire Survivors style) optimiz
 
 ## Project Structure
 *   `loomivers/`: Source code modules.
-    *   `assets/`: PNG source files (Enemies, Player).
+    *   `assets/`: Source PNG files organized by category.
     *   `js/`: Game logic.
+*   `generate_placeholders.py`: Creates dummy assets.
 *   `process_sprites.py`: Compiles PNGs to `assets_data.js`.
 *   `bundle.py`: Build script -> `loomivers_final.html`.

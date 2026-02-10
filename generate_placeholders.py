@@ -28,8 +28,7 @@ def create_readme(path, category, width, height, items):
     print(f"Created README in {path}")
 
 def generate_assets():
-    # 1. Player & Enemies (Already done, but we can ensure existence)
-    # Skipped to focus on new request
+    # 1. Player & Enemies (Already done, skipped)
 
     # 2. Map Tiles
     path = "loomivers/assets/map/tiles"
@@ -69,6 +68,25 @@ def generate_assets():
     create_placeholder(os.path.join(path, "p_axe.png"), "Proj", 32, 32, "#aa0000", "AXE")
     create_placeholder(os.path.join(path, "p_rail.png"), "Proj", 8, 32, "#ffff00", "|")
     create_placeholder(os.path.join(path, "p_bomb.png"), "Proj", 24, 24, "#00ff00", "B")
+
+    # 7. UI Misc (Joystick, etc)
+    path = "loomivers/assets/ui/misc"
+    items = ["joystick_base", "joystick_stick", "button_normal", "button_pressed", "panel_bg"]
+    create_readme(path, "UI Misc", 64, 64, items)
+    create_placeholder(os.path.join(path, "joystick_base.png"), "JoyBase", 128, 128, "#222222", "BASE")
+    create_placeholder(os.path.join(path, "joystick_stick.png"), "JoyStick", 64, 64, "#00aaaa", "STICK")
+    create_placeholder(os.path.join(path, "button_normal.png"), "Btn", 128, 48, "#444444", "BTN")
+    create_placeholder(os.path.join(path, "button_pressed.png"), "BtnP", 128, 48, "#222222", "BTN_P")
+    create_placeholder(os.path.join(path, "panel_bg.png"), "Panel", 256, 256, "#111111", "PANEL")
+
+    # 8. Items (Gems, Chests)
+    path = "loomivers/assets/items"
+    items = ["gem_xp", "gem_data", "chest_closed", "chest_open"]
+    create_readme(path, "Items", 32, 32, items)
+    create_placeholder(os.path.join(path, "gem_xp.png"), "XP", 16, 16, "#0000aa", "XP")
+    create_placeholder(os.path.join(path, "gem_data.png"), "DATA", 16, 16, "#00aa00", "DATA")
+    create_placeholder(os.path.join(path, "chest_closed.png"), "Chest", 32, 32, "#884400", "CHEST")
+    create_placeholder(os.path.join(path, "chest_open.png"), "ChestO", 32, 32, "#884400", "OPEN")
 
 if __name__ == "__main__":
     generate_assets()
