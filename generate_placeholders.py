@@ -1,55 +1,74 @@
 import os
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 def create_placeholder(path, name, width, height, color, text):
-    img = Image.new('RGB', (width, height), color)
-    draw = ImageDraw.Draw(img)
-    # Simple cross/text
-    draw.text((5, 5), text, fill="white")
-    draw.rectangle([0, 0, width-1, height-1], outline="white")
-    img.save(path)
-    print(f"Created {path}")
+    try:
+        img = Image.new('RGB', (width, height), color)
+        draw = ImageDraw.Draw(img)
+        # Simple cross/text
+        draw.text((2, 2), text, fill="white")
+        draw.rectangle([0, 0, width-1, height-1], outline="white")
+        img.save(path)
+        print(f"Created {path}")
+    except Exception as e:
+        print(f"Error creating {path}: {e}")
 
-def create_readme(path, name, width, height, frames):
+def create_readme(path, category, width, height, items):
     with open(os.path.join(path, "README.txt"), "w") as f:
-        f.write(f"ENTITY: {name}\n")
-        f.write(f"DIMENSIONS: {width}x{height} pixels\n")
+        f.write(f"CATEGORY: {category}\n")
+        f.write(f"STD DIMENSIONS: {width}x{height} pixels (unless specified)\n")
         f.write("--------------------------------------------------\n")
-        f.write("FRAMES REQUIRED:\n")
-        for frame in frames:
-            f.write(f"- {frame}.png: {width}x{height}\n")
+        f.write("FILES REQUIRED:\n")
+        for item in items:
+            f.write(f"- {item}.png\n")
         f.write("\nINSTRUCTIONS:\n")
-        f.write("Replace the placeholder PNGs with your own pixel art.\n")
+        f.write("Replace these placeholder PNGs with your final pixel art.\n")
         f.write("Keep the filenames exactly as they are.\n")
         f.write("Run 'python3 process_sprites.py' to update the game.\n")
     print(f"Created README in {path}")
 
 def generate_assets():
-    # Player
-    p_path = "loomivers/assets/player"
-    p_frames = ["stand", "walk1", "walk2", "walk3", "attack1", "attack2", "death"]
-    create_readme(p_path, "Player", 48, 48, p_frames)
-    for f in p_frames:
-        create_placeholder(os.path.join(p_path, f"{f}.png"), "Player", 48, 48, "#00aaaa", f)
+    # 1. Player & Enemies (Already done, but we can ensure existence)
+    # Skipped to focus on new request
 
-    # Enemies
-    enemies = [
-        ("swarmer", 32, 32, "#aa0000"),
-        ("tank", 48, 48, "#550000"),
-        ("glitch_mite", 24, 24, "#aaaa00"),
-        ("warden", 96, 96, "#aa00aa"),
-        ("corruptor", 128, 128, "#550055")
-    ]
+    # 2. Map Tiles
+    path = "loomivers/assets/map/tiles"
+    items = ["grass1", "grass2", "path1", "path2", "path_floor"]
+    create_readme(path, "Map Tiles", 64, 64, items)
+    for i in items:
+        create_placeholder(os.path.join(path, f"{i}.png"), "Tile", 64, 64, "#228822", i)
 
-    for e_name, w, h, col in enemies:
-        path = f"loomivers/assets/enemies/{e_name}"
-        frames = ["stand", "walk1", "walk2", "walk3", "attack1", "attack2", "death"]
-        if e_name in ["warden", "corruptor"]:
-            frames += ["special1", "special2", "special3"]
+    # 3. Map Decor
+    path = "loomivers/assets/map/decor"
+    items = ["tree1", "bush1", "bush2"]
+    create_readme(path, "Map Decor", 64, 64, items)
+    create_placeholder(os.path.join(path, "tree1.png"), "Tree", 64, 96, "#442200", "TREE")
+    create_placeholder(os.path.join(path, "bush1.png"), "Bush", 48, 48, "#22aa22", "BUSH1")
+    create_placeholder(os.path.join(path, "bush2.png"), "Bush", 48, 48, "#22aa22", "BUSH2")
 
-        create_readme(path, e_name.upper(), w, h, frames)
-        for f in frames:
-            create_placeholder(os.path.join(path, f"{f}.png"), e_name, w, h, col, f)
+    # 4. UI Icons - Weapons
+    path = "loomivers/assets/ui/icons/weapons"
+    items = ["neon_wand", "glitch_bomb", "pixel_rail", "void_axe", "force_field", "data_orbit"]
+    create_readme(path, "Weapon Icons", 32, 32, items)
+    for i in items:
+        create_placeholder(os.path.join(path, f"{i}.png"), "Icon", 32, 32, "#555555", i[:4])
+
+    # 5. UI Icons - Passives
+    path = "loomivers/assets/ui/icons/passives"
+    items = ["might", "haste", "speed", "armor", "drone_module", "cursed_heart", "glass_cannon", "heal"]
+    create_readme(path, "Passive Icons", 32, 32, items)
+    for i in items:
+        create_placeholder(os.path.join(path, f"{i}.png"), "Icon", 32, 32, "#333388", i[:4])
+
+    # 6. FX Projectiles
+    path = "loomivers/assets/fx/projectiles"
+    items = ["p_neon", "p_orb", "p_axe", "p_rail", "p_bomb"]
+    create_readme(path, "Projectiles", 16, 16, items)
+    create_placeholder(os.path.join(path, "p_neon.png"), "Proj", 16, 16, "#00ffff", "N")
+    create_placeholder(os.path.join(path, "p_orb.png"), "Proj", 16, 16, "#ff00ff", "O")
+    create_placeholder(os.path.join(path, "p_axe.png"), "Proj", 32, 32, "#aa0000", "AXE")
+    create_placeholder(os.path.join(path, "p_rail.png"), "Proj", 8, 32, "#ffff00", "|")
+    create_placeholder(os.path.join(path, "p_bomb.png"), "Proj", 24, 24, "#00ff00", "B")
 
 if __name__ == "__main__":
     generate_assets()

@@ -7,33 +7,49 @@ def process_sprites(assets_dir):
     for root, dirs, files in os.walk(assets_dir):
         for file in files:
             if file.endswith('.png'):
-                # Key construction: ENEMY_SWARMER_WALK1
-                # Path: loomivers/assets/enemies/swarmer/walk1.png
+                # Key construction logic
+                # Path: loomivers/assets/map/tiles/grass1.png
 
                 parts = root.split(os.sep)
-                # parts might be ['loomivers', 'assets', 'enemies', 'swarmer']
+                # parts might be ['loomivers', 'assets', 'map', 'tiles']
 
-                category = parts[-2].upper() # ENEMIES
-                entity = parts[-1].upper()   # SWARMER
-                action = file.split('.')[0].upper() # WALK1
+                # Check for known categories based on folder structure
+                category = parts[-2].upper() if len(parts) > 2 else ""
+                subcat = parts[-1].upper()
+                name = file.split('.')[0].upper()
 
-                if category == 'ASSETS': # Direct player folder?
-                    # loomivers/assets/player -> category=assets, entity=player
-                    category = entity # PLAYER
-                    key = f"{category}_{action}"
-                else:
-                    # loomivers/assets/enemies/swarmer -> ENEMIES_SWARMER_WALK1
-                    # But we want cleaner keys for game logic mapping
-                    # Game uses: 'PLAYER_WALK1', 'SWARMER_WALK1' ??
-                    # Let's standarize to ENTITY_ACTION
-                    # If folder is 'enemies', map 'swarmer' to 'SWARMER'
+                key = f"{subcat}_{name}" # Default fallback
 
-                    if category == 'ENEMIES' or category == 'BOSSES':
-                         key = f"{entity}_{action}"
-                    elif entity == 'PLAYER':
-                         key = f"PLAYER_{action}"
+                # Intelligent Mapping
+                if 'ENEMIES' in parts or 'BOSSES' in parts:
+                    # loomivers/assets/enemies/swarmer/walk1.png -> SWARMER_WALK1
+                    entity = subcat
+                    action = name
+                    key = f"{entity}_{action}"
+
+                elif 'PLAYER' in parts:
+                    key = f"PLAYER_{name}"
+
+                elif 'TILES' in parts:
+                    # loomivers/assets/map/tiles/grass1.png -> TILE_GRASS1
+                    key = f"TILE_{name}"
+
+                elif 'DECOR' in parts:
+                    # loomivers/assets/map/decor/tree1.png -> DECOR_TREE1
+                    key = f"DECOR_{name}"
+
+                elif 'ICONS' in parts:
+                    # loomivers/assets/ui/icons/weapons/neon_wand.png -> ICON_NEON_WAND
+                    # Parent is 'weapons' or 'passives', but unique name is usually enough
+                    # Let's prefix ICON_
+                    key = f"ICON_{name}"
+
+                elif 'PROJECTILES' in parts:
+                    # loomivers/assets/fx/projectiles/p_neon.png -> PROJ_P_NEON (or just PROJ_NEON if we strip p_)
+                    if name.startswith('P_'):
+                        key = f"PROJ_{name[2:]}"
                     else:
-                         key = f"{entity}_{action}"
+                        key = f"PROJ_{name}"
 
                 with open(os.path.join(root, file), "rb") as image_file:
                     encoded_string = base64.b64encode(image_file.read()).decode('utf-8')

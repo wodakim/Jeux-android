@@ -669,8 +669,8 @@ function render() {
         ...staticObjects.map(o => ({ y: o.y + o.height, d: () => {
              if (o.x + o.width < -cx || o.x > -cx + canvas.width || o.y + o.height < -cy || o.y > -cy + canvas.height) return;
              let key = o.type;
-             if (key === 'TREE') key = 'TREE_1';
-             if (key === 'BUSH') key = (Math.floor(o.x)%2===0) ? 'BUSH_1' : 'BUSH_2';
+             if (key === 'TREE') key = 'DECOR_TREE1';
+             if (key === 'BUSH') key = (Math.floor(o.x)%2===0) ? 'DECOR_BUSH1' : 'DECOR_BUSH2';
              const img = world.images[key];
              if (img) ctx.drawImage(img, o.x, o.y, o.width, o.height);
         }}))
@@ -678,12 +678,24 @@ function render() {
     all.forEach(x => x.d());
 
     projectilePool.active.forEach(p => {
-        // OPTIMIZATION: Removed ShadowBlur
-        ctx.fillStyle='#fff';
-        if(p.type==='NEON_WAND') ctx.fillRect(p.x,p.y,p.width,p.height);
-        else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
-        else if(p.type==='PIXEL_RAIL') { ctx.fillStyle='#0ff'; ctx.fillRect(p.x, p.y, p.width, p.height); }
-        else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
+        let key = null;
+        if (p.type === 'NEON_WAND') key = 'PROJ_NEON';
+        else if (p.type === 'GLITCH_BOMB') key = 'PROJ_BOMB';
+        else if (p.type === 'PIXEL_RAIL') key = 'PROJ_RAIL';
+        else if (p.type === 'VOID_AXE') key = 'PROJ_AXE';
+        else if (p.type === 'BOSS_ORB') key = 'PROJ_ORB';
+
+        const img = world.images[key];
+        if (img) {
+            ctx.drawImage(img, p.x, p.y, p.width, p.height);
+        } else {
+            // Fallback
+            ctx.fillStyle='#fff';
+            if(p.type==='NEON_WAND') ctx.fillRect(p.x,p.y,p.width,p.height);
+            else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
+            else if(p.type==='PIXEL_RAIL') { ctx.fillStyle='#0ff'; ctx.fillRect(p.x, p.y, p.width, p.height); }
+            else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
+        }
     });
     particlePool.active.forEach(p => { ctx.fillStyle=p.color; ctx.globalAlpha=p.life*2; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha=1; });
     damageTextPool.active.forEach(t => {
@@ -1066,6 +1078,13 @@ function gameLoop(ts) {
         upgrades.forEach(u => {
              const lvl = GameData.progress.upgrades[u.id] || 0;
              const cost = u.cost * (lvl + 1);
+
+             // Draw Icon if available
+             const iconKey = `ICON_${u.id}`; // e.g. ICON_HEALTH (if we rename upgrades to match)
+             // Upgrades in constants.js are 'health', 'magnet', etc.
+             // We generated passives like 'armor', 'speed'.
+             // Shop IDs are different. Let's just draw text for Shop for now or map them.
+
              ctx.fillStyle='#fff'; ctx.textAlign='left';
              ctx.fillText(`${u.name} (Lvl ${lvl})`, canvas.width/2-150, y+30);
 

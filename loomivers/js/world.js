@@ -64,16 +64,18 @@ export class World {
                 const wx = startX + x;
                 const wy = startY + y;
 
-                let tileType = 'GRASS_1';
-                if (Math.abs(this.random(wx, wy)) > 0.7) tileType = 'GRASS_2';
+                // Map generated keys to standard keys in world.js or update keys here
+                // process_sprites produces TILE_GRASS1, TILE_PATH1 etc.
+                let tileType = 'TILE_GRASS1';
+                if (Math.abs(this.random(wx, wy)) > 0.7) tileType = 'TILE_GRASS2';
 
                 // Path generation
                 const n = this.noise(wx, wy);
                 if (n > 0.7) {
-                    tileType = 'PATH_1';
-                    if (Math.abs(this.random(wx, wy * 2)) > 0.5) tileType = 'PATH_2';
+                    tileType = 'TILE_PATH1';
+                    if (Math.abs(this.random(wx, wy * 2)) > 0.5) tileType = 'TILE_PATH2';
                 } else if (n > 0.6) {
-                    tileType = 'PATH_FLOOR';
+                    tileType = 'TILE_PATH_FLOOR';
                 }
 
                 row.push(tileType);
