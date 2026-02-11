@@ -3,7 +3,7 @@ import { UI } from './ui.js';
 import { audioController } from './audio.js';
 import { world } from './world.js';
 import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone } from './entities.js';
-import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT, PASSIVES, CORRUPTED_ARTIFACTS, EVOLUTIONS } from './constants.js';
+import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT, PASSIVES, CORRUPTED_ARTIFACTS, EVOLUTIONS, DRONE_EVOLUTIONS } from './constants.js';
 
 // --- GAME LOGIC ---
 const canvas = document.getElementById('gameCanvas');
@@ -282,6 +282,17 @@ function triggerLevelUpScreenLogic() {
         pool.push({ id: p.id, title: p.name, desc: p.desc, isPassive: true });
     });
 
+    // Drone Evolution (if base drone exists)
+    if (player.drones.length > 0) {
+        DRONE_EVOLUTIONS.forEach(e => {
+            // Check if not already evolved to this type (simplified: one type per drone, or global drone type)
+            // Current logic: All drones share type or specific?
+            // Let's assume one evolution changes all drones or adds a specialized one.
+            // For now, let's just add it to the pool if not already selected.
+            pool.push({ id: e.id, title: e.name, desc: e.desc, isDroneEvo: true });
+        });
+    }
+
     // Corrupted Artifacts (Small chance)
     if (Math.random() < 0.2) {
          CORRUPTED_ARTIFACTS.forEach(a => pool.push({ id: a.id, title: `CURSED: ${a.name}`, desc: a.desc, isPassive: true }));
@@ -311,6 +322,10 @@ function selectUpgrade(id) {
             sceneManager.addShake(50);
             spawnDamageText("EVOLUTION!", player.x, player.y - 50, true);
         }
+    } else if (choice && choice.isDroneEvo) {
+        player.drones.forEach(d => d.evolve(id));
+        sceneManager.addShake(20);
+        spawnDamageText("DRONE UPGRADE!", player.x, player.y - 50, true);
     } else if (choice && choice.isPassive) {
         if (id === 'DRONE_MODULE') player.addDrone();
         else player.addPassive(id);

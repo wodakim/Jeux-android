@@ -58,3 +58,9 @@ export const EVOLUTIONS = {
     'GLITCH_BOMB': { passive: 'MIGHT', result: 'CLUSTER_BOMB', name: 'Cluster Bomb' },
     'PIXEL_RAIL': { passive: 'DRONE_MODULE', result: 'RAIL_TURRET', name: 'Rail Turret' }
 };
+
+export const DRONE_EVOLUTIONS = [
+    { id: 'DRONE_ATTACK', name: 'Attack Drone', desc: 'Fires rapid shots' },
+    { id: 'DRONE_HEAL', name: 'Medic Drone', desc: 'Heals 5 HP every 5s' },
+    { id: 'DRONE_LOOT', name: 'Looter Drone', desc: 'Collects far XP' }
+];

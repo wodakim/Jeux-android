@@ -643,7 +643,8 @@ export function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.g
 export class Drone {
     constructor(index) {
         this.index = index;
-        this.angle = (index * Math.PI * 2) / 3; // Spread out if multiple
+        this.type = 'BASE'; // BASE, HEAL, ATTACK, LOOT
+        this.angle = (index * Math.PI * 2) / 3;
         this.distance = 50;
         this.cooldown = 0;
         this.fireRate = 1.0;
@@ -651,22 +652,67 @@ export class Drone {
         this.y = 0;
     }
 
-    update(dt, player) {
-        this.angle += dt;
-        this.x = player.x + player.width/2 + Math.cos(this.angle) * this.distance - 4;
-        this.y = player.y + player.height/2 + Math.sin(this.angle) * this.distance - 4;
+    evolve(type) {
+        this.type = type;
+        if (type === 'DRONE_ATTACK') { this.fireRate = 0.3; }
+        else if (type === 'DRONE_HEAL') { this.fireRate = 5.0; }
+        else if (type === 'DRONE_LOOT') { this.distance = 100; this.fireRate = 0.5; }
+    }
 
+    update(dt, player) {
+        // Orbit Logic
+        this.angle += dt;
+        let orbitDist = this.distance;
+
+        // Loot behavior: move towards gem if close
+        if (this.type === 'DRONE_LOOT') {
+            let targetGem = null;
+            let minGemDist = 200;
+            for (const g of gemPool.active) {
+                const d = Math.sqrt((g.x - player.x)**2 + (g.y - player.y)**2);
+                if (d < minGemDist) { minGemDist = d; targetGem = g; }
+            }
+            if (targetGem) {
+                // Move drone towards gem (visual only, real pickup is magnet logic)
+                // Actually, let's make it pull gems
+                const dx = targetGem.x - this.x;
+                const dy = targetGem.y - this.y;
+                const d = Math.sqrt(dx*dx + dy*dy);
+                if (d > 5) {
+                    this.x += (dx/d) * 200 * dt;
+                    this.y += (dy/d) * 200 * dt;
+                    return; // Skip orbit
+                } else {
+                    // Pick it up for player
+                    targetGem.x = player.x; targetGem.y = player.y; // Snap to player
+                }
+            }
+        }
+
+        this.x = player.x + player.width/2 + Math.cos(this.angle) * orbitDist - 12;
+        this.y = player.y + player.height/2 + Math.sin(this.angle) * orbitDist - 12;
+
+        // Action Logic
         this.cooldown -= dt;
         if (this.cooldown <= 0) {
-            // Auto fire weak shot
-            let nearest = null, minDist = 300;
-            for (const e of enemyPool.active) {
-                const d = Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2);
-                if (d < minDist) { minDist = d; nearest = e; }
-            }
-            if (nearest) {
-                projectilePool.get().init('NEON_WAND', this.x, this.y, nearest.x+nearest.width/2, nearest.y+nearest.height/2, 5);
-                this.cooldown = this.fireRate;
+            if (this.type === 'BASE' || this.type === 'DRONE_ATTACK') {
+                // Fire
+                let nearest = null, minDist = 300;
+                for (const e of enemyPool.active) {
+                    const d = Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2);
+                    if (d < minDist) { minDist = d; nearest = e; }
+                }
+                if (nearest) {
+                    const dmg = this.type === 'DRONE_ATTACK' ? 10 : 5;
+                    projectilePool.get().init('NEON_WAND', this.x, this.y, nearest.x+nearest.width/2, nearest.y+nearest.height/2, dmg);
+                    this.cooldown = this.fireRate;
+                }
+            } else if (this.type === 'DRONE_HEAL') {
+                // Heal Aura
+                player.hp = Math.min(player.maxHp, player.hp + 5);
+                spawnDamageText("+5 HP", player.x, player.y - 20, false);
+                spawnParticle(player.x, player.y, '#0f0');
+                this.cooldown = 5.0;
             }
         }
     }

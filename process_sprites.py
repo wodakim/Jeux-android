@@ -25,7 +25,12 @@ def process_sprites(assets_dir):
                     key = f"{entity}_{action}"
 
                 elif 'PLAYER' in parts:
-                    key = f"PLAYER_{name}"
+                    # loomivers/assets/player/walk1.png -> PLAYER_WALK1
+                    # loomivers/assets/player/drone/base.png -> PLAYER_DRONE_BASE
+                    if 'DRONE' in parts:
+                        key = f"DRONE_{name}"
+                    else:
+                        key = f"PLAYER_{name}"
 
                 elif 'TILES' in parts:
                     key = f"TILE_{name}"
@@ -33,8 +38,10 @@ def process_sprites(assets_dir):
                 elif 'DECOR' in parts:
                     key = f"DECOR_{name}"
 
+                elif 'PORTAL' in parts:
+                    key = f"PORTAL_{name}"
+
                 elif 'ICONS' in parts:
-                    # loomivers/assets/ui/icons/weapons/neon_wand.png -> ICON_NEON_WAND
                     key = f"ICON_{name}"
 
                 elif 'PROJECTILES' in parts:

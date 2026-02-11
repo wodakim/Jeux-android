@@ -32,7 +32,7 @@ This script will:
 *   **Gameplay Systems:** Combo Logic & Hardcore Mode (1 HP).
 *   **Content:** Drone Companion, Passive Items, Corrupted Artifacts, Weapon Evolutions.
 
-### V9: Polish & Assets (Current Stable)
+### V9: Polish & Assets
 *   **Asset Pipeline:**
     *   Migrated to a directory-based asset structure (`loomivers/assets/`).
     *   Added placeholders for **everything**: Map Tiles, Decor, Items, UI Icons, Projectiles, and all Entities.
@@ -47,14 +47,19 @@ This script will:
 *   **UI/HUD:**
     *   Redesigned HUD for better mobile readability (Top-Left Stats, Top-Right Combo, Bottom-Center HP, Bottom-Edge XP).
 
+### V10: User Assets & Fixes (Current Stable)
+*   **Assets:** Integrated User-provided sprites for **Player** (Mage) and **Corruptor** (Boss).
+*   **Fixes:** Corrected logic for `ARMOR` passive application.
+*   **Sync:** Updated codebase to match the latest user repo state.
+
 ## Roadmap / Remaining Work
 
 ### Essential Polish (Backlog)
-*   [ ] **Visuals:** Replace placeholder assets with final Pixel Art.
+*   [ ] **Visuals:** Replace remaining placeholders (Swarmers, Projectiles, Icons) with final Pixel Art.
 *   [ ] **Audio:** Add distinct sound effects for new weapons (Evolutions).
 *   [ ] **Input:** Add "Hold to Auto-Buy" in Shop.
 
-### Proposed V10 Features
+### Proposed Features
 1.  **Pet Evolution:** Upgrade the basic Drone into specialized types (Healer, Gunner, Looter) via further upgrades.
 2.  **Challenge Rooms:** Spawn portal gates that lead to small timed arenas with specific modifiers (e.g., "No Weapons, only Dash").
 3.  **Daily Run:** A fixed seed run with a specific character/loadout, refreshing every 24h, with its own leaderboard.
