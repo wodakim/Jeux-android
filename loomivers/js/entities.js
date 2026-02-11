@@ -634,10 +634,26 @@ export class DamageText {
 }
 export const damageTextPool = new ObjectPool(() => new DamageText(), 50);
 
+// PORTAL
+export class Portal {
+    constructor() {
+        this.active = false;
+        this.x = 0; this.y = 0;
+        this.width = 64; this.height = 64;
+    }
+    init(x, y) {
+        this.active = true;
+        this.x = x;
+        this.y = y;
+    }
+}
+export const portalPool = new ObjectPool(() => new Portal(), 5);
+
 // HELPERS
 export function spawnGem(x, y, value, isData = false) { gemPool.get().init(x, y, value, isData); }
 export function spawnParticle(x, y, color) { particlePool.get().init(x, y, color); }
 export function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.get().init(amount, x, y, isCrit); }
+export function spawnPortal(x, y) { portalPool.get().init(x, y); }
 
 // DRONE COMPANION
 export class Drone {

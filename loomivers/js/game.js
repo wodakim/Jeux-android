@@ -2,7 +2,7 @@ import { GameData } from './utils.js';
 import { UI } from './ui.js';
 import { audioController } from './audio.js';
 import { world } from './world.js';
-import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone } from './entities.js';
+import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone, portalPool, spawnPortal } from './entities.js';
 import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT, PASSIVES, CORRUPTED_ARTIFACTS, EVOLUTIONS, DRONE_EVOLUTIONS } from './constants.js';
 
 // --- GAME LOGIC ---
@@ -25,6 +25,7 @@ let activeUpgradeChoices = [];
 let selectedCharacter = 'WEAVER';
 let comboCount = 0;
 let comboTimer = 0;
+let challengeTimer = 0;
 
 // Input Handler
 class InputHandler {
@@ -33,6 +34,9 @@ class InputHandler {
         this.keys = {};
         this.taps = [];
         this.lastTouchTime = 0;
+        this.pointerDown = false;
+        this.pointerX = 0;
+        this.pointerY = 0;
         this.setupTouch();
         this.setupKeyboard();
     }
@@ -41,6 +45,10 @@ class InputHandler {
         document.addEventListener('touchstart', (e) => {
             this.lastTouchTime = Date.now();
             const touch = e.changedTouches[0];
+            this.pointerDown = true;
+            this.pointerX = touch.clientX;
+            this.pointerY = touch.clientY;
+
             if (currentScene !== 'PLAYING') {
                 this.taps.push({ x: touch.clientX, y: touch.clientY });
                 return;
@@ -56,9 +64,12 @@ class InputHandler {
         }, { passive: false });
 
         document.addEventListener('touchmove', (e) => {
+            const touch = e.changedTouches[0];
+            this.pointerX = touch.clientX;
+            this.pointerY = touch.clientY;
+
             if (currentScene !== 'PLAYING' || !this.joystick.active) return;
             e.preventDefault();
-            const touch = e.changedTouches[0];
             const dx = touch.clientX - this.joystick.originX;
             const dy = touch.clientY - this.joystick.originY;
             const distance = Math.sqrt(dx*dx + dy*dy);
@@ -78,12 +89,20 @@ class InputHandler {
             this.joystick.active = false;
             this.joystick.x = 0;
             this.joystick.y = 0;
+            this.pointerDown = false;
         });
 
         document.addEventListener('mousedown', (e) => {
              // Debounce: Ignore mouse events if touch events were triggered recently (500ms)
              if (Date.now() - this.lastTouchTime < 500) return;
              this.taps.push({ x: e.clientX, y: e.clientY });
+             this.pointerDown = true;
+             this.pointerX = e.clientX;
+             this.pointerY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            this.pointerDown = false;
         });
     }
 
@@ -424,6 +443,16 @@ function updateGame(dt) {
             e.init(type, sx, sy);
             e.hp *= diffMult; e.speed *= diffMult;
         }
+
+        // Challenge Portal Spawn (Rare)
+        if (Math.random() < 0.005 && portalPool.active.length === 0) { // 0.5% chance per spawn cycle
+             // Spawn visible on screen but away from player? Or off screen?
+             // Let's spawn it within view to entice player
+             const pa = Math.random() * 6.28;
+             const pr = 300;
+             spawnPortal(player.x + Math.cos(pa)*pr, player.y + Math.sin(pa)*pr);
+             spawnDamageText("PORTAL DETECTED", player.x, player.y - 80, true);
+        }
     }
 
     // Nemesis
@@ -532,6 +561,17 @@ function updateGame(dt) {
             if (g.isData) { GameData.progress.currency+=g.value; spawnDamageText("+$"+g.value, player.x, player.y-20); audioController.playPing(); }
             else player.gainXp(g.value);
             gemPool.release(g);
+        }
+    }
+
+    // Portal Interaction
+    for (const p of portalPool.active) {
+        if (p.x < player.x + player.width && p.x + p.width > player.x && p.y < player.y + player.height && p.y + p.height > player.y) {
+            portalPool.release(p);
+            challengeTimer = 30; // 30s challenge
+            sceneManager.changeScene('CHALLENGE');
+            sceneManager.addShake(20);
+            audioController.setBossMode(true); // Dramatic music
         }
     }
 }
@@ -985,6 +1025,47 @@ function gameLoop(ts) {
         UI.handleInput(input);
     } else if (currentScene === 'PLAYING') {
         updateGame(dt); render();
+    } else if (currentScene === 'CHALLENGE') {
+        render(); // Render game world in background
+        challengeTimer -= dt;
+
+        // Challenge Logic: Survive
+        // Spawn intensity maxed out
+        gameTime += dt * 5; // Fast forward difficulty scaling locally
+
+        ctx.fillStyle = 'rgba(50, 0, 50, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#f0f'; ctx.font = '40px monospace'; ctx.textAlign='center';
+        ctx.fillText(`SURVIVE! ${Math.ceil(challengeTimer)}`, canvas.width/2, 100);
+
+        // Spawn waves rapidly
+        if (Math.random() < 0.1) {
+             const a = Math.random()*6.28;
+             const r = 400;
+             enemyPool.get().init('SWARMER', player.x+Math.cos(a)*r, player.y+Math.sin(a)*r);
+        }
+
+        // Reuse updateGame logic but maybe skip some timers?
+        // Just calling updateGame works to keep things moving, but we want custom rules.
+        // Let's manually update entities to enforce "Challenge" state rules if complex.
+        // For simple survival, updateGame is fine, but we need to ensure boss doesn't spawn on top.
+        updateGame(dt);
+
+        if (challengeTimer <= 0) {
+            // Success
+            sceneManager.changeScene('PLAYING');
+            spawnDamageText("CHALLENGE COMPLETE!", player.x, player.y - 50, true);
+            spawnGem(player.x, player.y - 100, 500, true); // Big money reward
+            audioController.setBossMode(false);
+            // Clear screen of enemies
+            enemyPool.active.forEach(e => e.die());
+        }
+        if (player.hp <= 0) {
+            // Fail handled by player.takeDamage -> endGame
+        }
+        UI.handleInput(input);
+
     } else if (currentScene === 'LEVEL_UP') {
         render(); ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
