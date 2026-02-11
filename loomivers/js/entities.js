@@ -116,7 +116,7 @@ export class Player {
         if (existing) existing.level++;
         else this.passives.push({ id: id, level: 1 });
 
-                // Apply Passive Effects
+        // Apply Passive Effects
         if (id === 'MIGHT') this.damageMult += 0.1;
         else if (id === 'HASTE') this.fireRateMult *= 0.9;
         else if (id === 'SPEED') this.speed += 20;
