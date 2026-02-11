@@ -598,10 +598,8 @@ function render() {
                 spriteKey = 'PLAYER_DEATH';
             }
 
-            // Fallback if image missing
-            if (!world.images[spriteKey]) spriteKey = 'PLAYER_STAND';
-
-            const img = world.images[spriteKey];
+            let img = world.images[spriteKey];
+            if (!img) img = world.images['UI_MISSING'];
 
             if (img) {
                 ctx.save();
@@ -621,13 +619,6 @@ function render() {
 
                 ctx.drawImage(img, -drawW/2, -drawH/2 - 10, drawW, drawH);
                 ctx.restore();
-            } else {
-                ctx.fillStyle = player.color;
-                ctx.fillRect(player.x, player.y, player.width, player.height);
-                ctx.fillStyle = '#0aa';
-                ctx.fillRect(player.x+player.width, player.y+4, 4, player.height);
-                ctx.fillRect(player.x+4, player.y+player.height, player.width, 4);
-                if (player.iframeTimer > 0 && Math.floor(Date.now()/100)%2===0) { ctx.fillStyle='#fff'; ctx.fillRect(player.x, player.y, player.width, player.height); }
             }
         }},
         ...enemyPool.active.map(e => ({ y: e.y + e.height, d: () => {
@@ -648,10 +639,10 @@ function render() {
 
             let img = world.images[key];
             if (!img) {
-                 // Fallback to stand
                  key = `${baseKey}_STAND`;
                  img = world.images[key];
             }
+            if (!img) img = world.images['UI_MISSING'];
 
             if (img) {
                 ctx.save();
@@ -660,7 +651,6 @@ function render() {
                 ctx.translate(cx, cy);
                 if (!e.facingRight) ctx.scale(-1, 1);
 
-                // Draw slightly larger than hitbox
                 const drawW = e.width * 1.5;
                 const drawH = e.height * 1.5;
 
@@ -671,22 +661,23 @@ function render() {
 
                 ctx.drawImage(img, -drawW/2, -drawH/2 - 5, drawW, drawH);
                 ctx.restore();
-            } else {
-                ctx.fillStyle = e.flashTimer > 0 ? '#fff' : e.color;
-                ctx.fillRect(e.x, e.y, e.width, e.height);
             }
         }})),
         ...gemPool.active.map(g => ({ y: g.y + g.height, d: () => {
-            ctx.fillStyle = '#ff0'; ctx.beginPath();
-            ctx.moveTo(g.x+g.width/2, g.y); ctx.lineTo(g.x+g.width, g.y+g.height/2);
-            ctx.lineTo(g.x+g.width/2, g.y+g.height); ctx.lineTo(g.x, g.y+g.height/2); ctx.fill();
+            // Gem rendering
+            let key = g.isData ? 'ITEM_DATA' : 'ITEM_XP';
+            let img = world.images[key] || world.images['UI_MISSING'];
+            if (img) {
+                ctx.drawImage(img, g.x, g.y, g.width, g.height);
+            }
         }})),
         ...staticObjects.map(o => ({ y: o.y + o.height, d: () => {
              if (o.x + o.width < -cx || o.x > -cx + canvas.width || o.y + o.height < -cy || o.y > -cy + canvas.height) return;
              let key = o.type;
              if (key === 'TREE') key = 'DECOR_TREE1';
              if (key === 'BUSH') key = (Math.floor(o.x)%2===0) ? 'DECOR_BUSH1' : 'DECOR_BUSH2';
-             const img = world.images[key];
+             let img = world.images[key];
+             if (!img) img = world.images['UI_MISSING'];
              if (img) ctx.drawImage(img, o.x, o.y, o.width, o.height);
         }}))
     ].sort((a,b) => a.y - b.y);
@@ -700,16 +691,10 @@ function render() {
         else if (p.type === 'VOID_AXE') key = 'PROJ_AXE';
         else if (p.type === 'BOSS_ORB') key = 'PROJ_ORB';
 
-        const img = world.images[key];
+        let img = world.images[key];
+        if (!img) img = world.images['UI_MISSING'];
         if (img) {
             ctx.drawImage(img, p.x, p.y, p.width, p.height);
-        } else {
-            // Fallback
-            ctx.fillStyle='#fff';
-            if(p.type==='NEON_WAND') ctx.fillRect(p.x,p.y,p.width,p.height);
-            else if(p.type==='GLITCH_BOMB') { ctx.fillStyle='#f0f'; ctx.beginPath(); ctx.arc(p.x+p.width/2,p.y+p.height/2,p.width/2,0,6.28); ctx.fill(); }
-            else if(p.type==='PIXEL_RAIL') { ctx.fillStyle='#0ff'; ctx.fillRect(p.x, p.y, p.width, p.height); }
-            else if(p.type==='VOID_AXE') { ctx.fillStyle='#a0a'; ctx.fillRect(p.x, p.y, p.width, p.height); }
         }
     });
     particlePool.active.forEach(p => { ctx.fillStyle=p.color; ctx.globalAlpha=p.life*2; ctx.fillRect(p.x, p.y, 4, 4); ctx.globalAlpha=1; });

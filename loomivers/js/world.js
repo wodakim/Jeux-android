@@ -173,15 +173,18 @@ export class World {
                 for (let y = 0; y < tilesPerChunk; y++) {
                     for (let x = 0; x < tilesPerChunk; x++) {
                         const tile = chunk.tiles[y][x];
-                        if (this.images[tile]) {
-                            const drawX = (cx * this.chunkSize) + (x * this.tileSize);
-                            const drawY = (cy * this.chunkSize) + (y * this.tileSize);
 
-                            // Optimization: Check if tile is visible?
-                            // Canvas drawImage is pretty fast with culling, but let's check basic bounds
-                            if (drawX + this.tileSize > startX && drawX < startX + canvasWidth &&
-                                drawY + this.tileSize > startY && drawY < startY + canvasHeight) {
-                                ctx.drawImage(this.images[tile],
+                        const drawX = (cx * this.chunkSize) + (x * this.tileSize);
+                        const drawY = (cy * this.chunkSize) + (y * this.tileSize);
+
+                        if (drawX + this.tileSize > startX && drawX < startX + canvasWidth &&
+                            drawY + this.tileSize > startY && drawY < startY + canvasHeight) {
+
+                            let img = this.images[tile];
+                            if (!img) img = this.images['UI_MISSING']; // Fallback
+
+                            if (img) {
+                                ctx.drawImage(img,
                                     Math.floor(drawX),
                                     Math.floor(drawY),
                                     this.tileSize + 1,
