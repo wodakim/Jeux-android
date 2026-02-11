@@ -282,13 +282,9 @@ function triggerLevelUpScreenLogic() {
         pool.push({ id: p.id, title: p.name, desc: p.desc, isPassive: true });
     });
 
-    // Drone Evolution (if base drone exists)
-    if (player.drones.length > 0) {
+    // Drone Evolution (if base drone exists and not yet evolved)
+    if (player.drones.length > 0 && player.drones[0].type === 'BASE') {
         DRONE_EVOLUTIONS.forEach(e => {
-            // Check if not already evolved to this type (simplified: one type per drone, or global drone type)
-            // Current logic: All drones share type or specific?
-            // Let's assume one evolution changes all drones or adds a specialized one.
-            // For now, let's just add it to the pool if not already selected.
             pool.push({ id: e.id, title: e.name, desc: e.desc, isDroneEvo: true });
         });
     }
@@ -588,6 +584,14 @@ function render() {
 
     // Entities
     const all = [
+        ...player.drones.map(d => ({ y: d.y + 24, d: () => {
+             let key = d.type === 'BASE' ? 'DRONE_BASE' : d.type;
+             let img = world.images[key];
+             if (!img) img = world.images['UI_MISSING'];
+             if (img) {
+                 ctx.drawImage(img, Math.floor(d.x), Math.floor(d.y), 24, 24);
+             }
+        }})),
         { y: player.y + player.height, d: () => {
             let spriteKey = 'PLAYER_STAND';
             if (player.state === 'WALK') {
