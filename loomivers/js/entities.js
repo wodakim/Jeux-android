@@ -116,11 +116,11 @@ export class Player {
         if (existing) existing.level++;
         else this.passives.push({ id: id, level: 1 });
 
-        // Apply Passive Effects
+                // Apply Passive Effects
         if (id === 'MIGHT') this.damageMult += 0.1;
         else if (id === 'HASTE') this.fireRateMult *= 0.9;
         else if (id === 'SPEED') this.speed += 20;
-        else if (id === 'ARMOR') this.maxHp += 20; this.hp += 20;
+        else if (id === 'ARMOR') { this.maxHp += 20; this.hp += 20; }
         else if (id === 'CURSED_HEART') { this.maxHp -= 50; this.damageMult += 0.5; this.hp = Math.min(this.hp, this.maxHp); }
         else if (id === 'GLASS_CANNON') { this.maxHp = 1; this.damageMult += 1.0; this.hp = 1; }
     }
