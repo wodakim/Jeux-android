@@ -2,7 +2,7 @@ import { GameData } from './utils.js';
 import { UI } from './ui.js';
 import { audioController } from './audio.js';
 import { world } from './world.js';
-import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone } from './entities.js';
+import { player, enemyPool, projectilePool, gemPool, particlePool, damageTextPool, spawnGem, spawnParticle, spawnDamageText, staticObjects, StaticObject, Drone, portalPool, spawnPortal } from './entities.js';
 import { CHARACTERS, WORLD_WIDTH, WORLD_HEIGHT, PASSIVES, CORRUPTED_ARTIFACTS, EVOLUTIONS, DRONE_EVOLUTIONS } from './constants.js';
 
 // --- GAME LOGIC ---
@@ -25,6 +25,7 @@ let activeUpgradeChoices = [];
 let selectedCharacter = 'WEAVER';
 let comboCount = 0;
 let comboTimer = 0;
+let challengeTimer = 0;
 
 // Input Handler
 class InputHandler {
@@ -33,6 +34,9 @@ class InputHandler {
         this.keys = {};
         this.taps = [];
         this.lastTouchTime = 0;
+        this.pointerDown = false;
+        this.pointerX = 0;
+        this.pointerY = 0;
         this.setupTouch();
         this.setupKeyboard();
     }
@@ -41,6 +45,10 @@ class InputHandler {
         document.addEventListener('touchstart', (e) => {
             this.lastTouchTime = Date.now();
             const touch = e.changedTouches[0];
+            this.pointerDown = true;
+            this.pointerX = touch.clientX;
+            this.pointerY = touch.clientY;
+
             if (currentScene !== 'PLAYING') {
                 this.taps.push({ x: touch.clientX, y: touch.clientY });
                 return;
@@ -56,9 +64,12 @@ class InputHandler {
         }, { passive: false });
 
         document.addEventListener('touchmove', (e) => {
+            const touch = e.changedTouches[0];
+            this.pointerX = touch.clientX;
+            this.pointerY = touch.clientY;
+
             if (currentScene !== 'PLAYING' || !this.joystick.active) return;
             e.preventDefault();
-            const touch = e.changedTouches[0];
             const dx = touch.clientX - this.joystick.originX;
             const dy = touch.clientY - this.joystick.originY;
             const distance = Math.sqrt(dx*dx + dy*dy);
@@ -78,12 +89,20 @@ class InputHandler {
             this.joystick.active = false;
             this.joystick.x = 0;
             this.joystick.y = 0;
+            this.pointerDown = false;
         });
 
         document.addEventListener('mousedown', (e) => {
              // Debounce: Ignore mouse events if touch events were triggered recently (500ms)
              if (Date.now() - this.lastTouchTime < 500) return;
              this.taps.push({ x: e.clientX, y: e.clientY });
+             this.pointerDown = true;
+             this.pointerX = e.clientX;
+             this.pointerY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            this.pointerDown = false;
         });
     }
 
@@ -282,13 +301,9 @@ function triggerLevelUpScreenLogic() {
         pool.push({ id: p.id, title: p.name, desc: p.desc, isPassive: true });
     });
 
-    // Drone Evolution (if base drone exists)
-    if (player.drones.length > 0) {
+    // Drone Evolution (if base drone exists and not yet evolved)
+    if (player.drones.length > 0 && player.drones[0].type === 'BASE') {
         DRONE_EVOLUTIONS.forEach(e => {
-            // Check if not already evolved to this type (simplified: one type per drone, or global drone type)
-            // Current logic: All drones share type or specific?
-            // Let's assume one evolution changes all drones or adds a specialized one.
-            // For now, let's just add it to the pool if not already selected.
             pool.push({ id: e.id, title: e.name, desc: e.desc, isDroneEvo: true });
         });
     }
@@ -428,6 +443,16 @@ function updateGame(dt) {
             e.init(type, sx, sy);
             e.hp *= diffMult; e.speed *= diffMult;
         }
+
+        // Challenge Portal Spawn (Rare)
+        if (Math.random() < 0.005 && portalPool.active.length === 0) { // 0.5% chance per spawn cycle
+             // Spawn visible on screen but away from player? Or off screen?
+             // Let's spawn it within view to entice player
+             const pa = Math.random() * 6.28;
+             const pr = 300;
+             spawnPortal(player.x + Math.cos(pa)*pr, player.y + Math.sin(pa)*pr);
+             spawnDamageText("PORTAL DETECTED", player.x, player.y - 80, true);
+        }
     }
 
     // Nemesis
@@ -538,6 +563,17 @@ function updateGame(dt) {
             gemPool.release(g);
         }
     }
+
+    // Portal Interaction
+    for (const p of portalPool.active) {
+        if (p.x < player.x + player.width && p.x + p.width > player.x && p.y < player.y + player.height && p.y + p.height > player.y) {
+            portalPool.release(p);
+            challengeTimer = 30; // 30s challenge
+            sceneManager.changeScene('CHALLENGE');
+            sceneManager.addShake(20);
+            audioController.setBossMode(true); // Dramatic music
+        }
+    }
 }
 
 function render() {
@@ -588,6 +624,14 @@ function render() {
 
     // Entities
     const all = [
+        ...player.drones.map(d => ({ y: d.y + 24, d: () => {
+             let key = d.type === 'BASE' ? 'DRONE_BASE' : d.type;
+             let img = world.images[key];
+             if (!img) img = world.images['UI_MISSING'];
+             if (img) {
+                 ctx.drawImage(img, Math.floor(d.x), Math.floor(d.y), 24, 24);
+             }
+        }})),
         { y: player.y + player.height, d: () => {
             let spriteKey = 'PLAYER_STAND';
             if (player.state === 'WALK') {
@@ -679,6 +723,15 @@ function render() {
              let img = world.images[key];
              if (!img) img = world.images['UI_MISSING'];
              if (img) ctx.drawImage(img, o.x, o.y, o.width, o.height);
+        }})),
+        ...portalPool.active.map(p => ({ y: p.y + p.height, d: () => {
+             let img = world.images['PORTAL_GATE'] || world.images['UI_MISSING'];
+             if (img) {
+                 ctx.save();
+                 ctx.globalAlpha = 0.8 + Math.sin(Date.now() / 200) * 0.2;
+                 ctx.drawImage(img, p.x, p.y, p.width, p.height);
+                 ctx.restore();
+             }
         }}))
     ].sort((a,b) => a.y - b.y);
     all.forEach(x => x.d());
@@ -791,7 +844,7 @@ function render() {
     }
 
     if (currentScene === 'PLAYING') {
-        if (player.glitchMeter >= player.glitchMax) UI.drawButton(ctx, 'OVERDRIVE!', canvas.width-150, canvas.height-100, 130, 80, '#f0f', () => player.activateOverdrive());
+        if (player.glitchMeter >= player.glitchMax) UI.drawButton(ctx, 'OVERDRIVE!', canvas.width-150, canvas.height-100, 130, 80, '#f0f', () => player.activateOverdrive(), 'primary');
         else {
             const p = player.glitchMeter/player.glitchMax;
             ctx.fillStyle='#333'; ctx.fillRect(canvas.width-150, canvas.height-40, 130, 20);
@@ -820,6 +873,7 @@ function gameLoop(ts) {
             });
         }
 
+        drawGridBackground(ts * 0.05);
         ctx.fillStyle = '#0ff'; ctx.font = '30px monospace'; ctx.textAlign = 'center'; ctx.fillText('LOADING LOOMIVERS...', canvas.width/2, canvas.height/2);
         ctx.fillStyle='#333'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200, 10);
         ctx.fillStyle='#0f0'; ctx.fillRect(canvas.width/2-100, canvas.height/2+20, 200*Math.min(1, sceneManager.bootTimer/2), 10);
@@ -827,64 +881,99 @@ function gameLoop(ts) {
         if (sceneManager.bootTimer > 2 && world.loaded) sceneManager.changeScene('TITLE');
     } else if (currentScene === 'TITLE') {
         drawGridBackground(ts * 0.05);
-        ctx.fillStyle = '#0ff'; ctx.font = '80px monospace'; ctx.textAlign = 'center'; ctx.fillText('LOOMIVERS', canvas.width/2, 100);
-        ctx.fillStyle = '#fff'; ctx.font = '30px monospace'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 140);
-        UI.drawButton(ctx, 'PLAY', canvas.width/2-100, 220, 200, 50, '#0a0', () => sceneManager.changeScene('HUB'));
-        UI.drawButton(ctx, 'SETTINGS', canvas.width/2-100, 290, 200, 50, '#333', () => sceneManager.changeScene('SETTINGS'));
-        UI.drawButton(ctx, 'CREDITS', canvas.width/2-100, 360, 200, 50, '#333', () => alert("Created by Montano Mickael, Founder of Logoloom"));
-        UI.drawButton(ctx, 'QUIT', canvas.width/2-100, 430, 200, 50, '#500', () => window.close());
+
+        // Glitch Title
+        ctx.textAlign = 'center';
+        if (Math.random() > 0.95) ctx.translate((Math.random()-0.5)*10, 0);
+
+        ctx.shadowColor = '#0ff'; ctx.shadowBlur = 20;
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 80px monospace';
+        ctx.fillText('LOOMIVERS', canvas.width/2, 120);
+
+        ctx.shadowBlur = 0; ctx.fillStyle = '#f0f';
+        ctx.fillText('LOOMIVERS', canvas.width/2 - 2, 120);
+        ctx.fillStyle = '#0ff';
+        ctx.fillText('LOOMIVERS', canvas.width/2 + 2, 120);
+
+        ctx.setTransform(1,0,0,1,0,0); // Reset glitch
+
+        ctx.fillStyle = '#fff'; ctx.font = '24px monospace'; ctx.fillText("THE WEAVER'S GLITCH", canvas.width/2, 160);
+
+        const btnW = 220; const btnH = 50; const btnX = canvas.width/2 - btnW/2;
+        let y = 250;
+        UI.drawButton(ctx, 'PLAY', btnX, y, btnW, btnH, '#0a0', () => sceneManager.changeScene('HUB'), 'primary'); y+=70;
+        UI.drawButton(ctx, 'SETTINGS', btnX, y, btnW, btnH, '#222', () => sceneManager.changeScene('SETTINGS')); y+=70;
+        UI.drawButton(ctx, 'CREDITS', btnX, y, btnW, btnH, '#222', () => alert("Created by Montano Mickael, Founder of Logoloom")); y+=70;
+        UI.drawButton(ctx, 'QUIT', btnX, y, btnW, btnH, '#500', () => window.close());
+
         UI.handleInput(input);
     } else if (currentScene === 'HUB') {
-        ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        drawGridBackground(ts * 0.02);
 
-        // Dynamic layout calculation to prevent overlap
-        const totalHeight = 50 * 5 + 20 * 4; // 5 buttons (50px) + 4 gaps (20px) = 330px
-        const startY = Math.max(100, (canvas.height - totalHeight) / 2 + 30); // Center vertically but keep header space
+        // Main Panel
+        const panelW = Math.min(500, canvas.width - 40);
+        const panelH = Math.min(600, canvas.height - 40);
+        const panelX = (canvas.width - panelW) / 2;
+        const panelY = (canvas.height - panelH) / 2;
 
-        ctx.fillStyle='#0ff'; ctx.textAlign='center'; ctx.font='40px monospace'; ctx.fillText("THE SANCTUARY", canvas.width/2, startY - 60);
-        ctx.fillStyle='#ff0'; ctx.textAlign='left'; ctx.font='24px monospace'; ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, 20, 40);
+        UI.drawPanel(ctx, panelX, panelY, panelW, panelH, '#111', 'THE SANCTUARY');
 
-        let y = startY;
+        ctx.textAlign='left';
+        ctx.fillStyle='#ff0';
+        ctx.font='24px monospace';
+        ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, panelX + 20, panelY + 50);
+
+        let y = panelY + 100;
+        const btnW = panelW - 60;
+        const btnX = panelX + 30;
         const gap = 70;
 
-        UI.drawButton(ctx, 'ENTER THE GLITCH', canvas.width/2-100, y, 200, 50, '#f0f', () => { if(GameData.progress.storySeen) startGame(); else sceneManager.changeScene('STORY'); storyY=canvas.height; });
+        UI.drawButton(ctx, 'ENTER THE GLITCH', btnX, y, btnW, 50, '#a0a', () => { if(GameData.progress.storySeen) startGame(); else sceneManager.changeScene('STORY'); storyY=canvas.height; }, 'primary');
         y += gap;
-        UI.drawButton(ctx, 'CHARACTER SELECT', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('WARDROBE'));
+        UI.drawButton(ctx, 'CHARACTER SELECT', btnX, y, btnW, 50, '#333', () => sceneManager.changeScene('WARDROBE'));
         y += gap;
-        UI.drawButton(ctx, 'UPGRADE SHOP', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('SHOP'));
+        UI.drawButton(ctx, 'UPGRADE SHOP', btnX, y, btnW, 50, '#333', () => sceneManager.changeScene('SHOP'));
         y += gap;
-        UI.drawButton(ctx, 'ARCHIVES', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('ARCHIVES'));
+        UI.drawButton(ctx, 'ARCHIVES', btnX, y, btnW, 50, '#333', () => sceneManager.changeScene('ARCHIVES'));
         y += gap;
-        UI.drawButton(ctx, 'TROPHIES', canvas.width/2-100, y, 200, 50, '#333', () => sceneManager.changeScene('TROPHIES'));
+        UI.drawButton(ctx, 'TROPHIES', btnX, y, btnW, 50, '#333', () => sceneManager.changeScene('TROPHIES'));
 
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', () => sceneManager.changeScene('TITLE'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', () => sceneManager.changeScene('TITLE'));
         UI.handleInput(input);
     } else if (currentScene === 'ARCHIVES') {
-        ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.fillText('ARCHIVES', canvas.width/2, 50);
-        let y=100;
+        drawGridBackground(ts * 0.02);
+        const panelW = Math.min(600, canvas.width - 40);
+        const panelH = canvas.height - 100;
+        UI.drawPanel(ctx, (canvas.width-panelW)/2, 50, panelW, panelH, '#111', 'ARCHIVES');
+
+        let y=120;
         const types = Object.keys(GameData.progress.bestiary);
-        if(types.length===0) { ctx.font='20px monospace'; ctx.fillText("NO DATA COLLECTED", canvas.width/2, 200); }
+        if(types.length===0) { ctx.font='20px monospace'; ctx.textAlign='center'; ctx.fillText("NO DATA COLLECTED", canvas.width/2, 200); }
         else {
-            ctx.font='24px monospace';
+            ctx.font='24px monospace'; ctx.fillStyle='#ccc';
             types.forEach(t => {
                 ctx.textAlign='left';
-                ctx.fillText(`${t}: ${GameData.progress.bestiary[t]} KILLS`, canvas.width/2-100, y);
+                ctx.fillText(`${t}: ${GameData.progress.bestiary[t]} KILLS`, (canvas.width-panelW)/2 + 40, y);
                 y+=40;
             });
         }
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'TROPHIES') {
-        ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.fillText('TROPHIES', canvas.width/2, 50);
+        drawGridBackground(ts * 0.02);
+        const panelW = Math.min(600, canvas.width - 40);
+        const panelH = canvas.height - 100;
+        UI.drawPanel(ctx, (canvas.width-panelW)/2, 50, panelW, panelH, '#111', 'TROPHIES');
 
-        ctx.textAlign='left'; let y=120;
-        ctx.fillText(`HIGH SCORE: ${GameData.progress.highScore}`, canvas.width/2-150, y); y+=50;
+        const startX = (canvas.width-panelW)/2 + 40;
+        let y=120;
+
+        ctx.textAlign='left'; ctx.fillStyle='#fff';
+        ctx.fillText(`HIGH SCORE: ${GameData.progress.highScore}`, startX, y); y+=50;
 
         const kills = GameData.progress.bestiary ? Object.values(GameData.progress.bestiary).reduce((a,b)=>a+b,0) : 0;
-        ctx.fillText(`TOTAL KILLS: ${kills}`, canvas.width/2-150, y); y+=50;
-        ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, canvas.width/2-150, y); y+=50;
+        ctx.fillText(`TOTAL KILLS: ${kills}`, startX, y); y+=50;
+        ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, startX, y); y+=50;
 
         const achs = [
             {name: "First Blood", done: kills > 0},
@@ -894,93 +983,128 @@ function gameLoop(ts) {
         ];
         achs.forEach(a => {
             ctx.fillStyle = a.done ? '#0f0' : '#555';
-            ctx.fillText(`[${a.done?'X':' '}] ${a.name}`, canvas.width/2-150, y);
+            ctx.fillText(`[${a.done?'X':' '}] ${a.name}`, startX, y);
             y+=40;
         });
 
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'WARDROBE') {
-        ctx.fillStyle='#050505'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText("CHARACTER SELECT", canvas.width/2, 50);
+        drawGridBackground(ts * 0.02);
 
-        // Single column list, centered, easier for mobile
+        // Single column list, centered
         const keys = Object.keys(CHARACTERS);
-        const itemH = 80;
-        const totalH = keys.length * itemH;
-        let startY = 100;
+        const itemH = 100;
 
-        // Simple pagination logic if needed, but for 10 items (800px) might need scrolling.
-        // Assuming user can scroll or we fit them?
-        // Let's implement simple pagination.
+        // Simple pagination logic
         if (!window.wardrobePage) window.wardrobePage = 0;
-        const itemsPerPage = 5;
+        const itemsPerPage = 4; // reduced for larger cards
         const totalPages = Math.ceil(keys.length / itemsPerPage);
 
         const startIdx = window.wardrobePage * itemsPerPage;
         const endIdx = Math.min(startIdx + itemsPerPage, keys.length);
 
+        const listH = itemsPerPage * (itemH + 10);
+        const panelY = (canvas.height - listH) / 2;
+
+        UI.drawPanel(ctx, (canvas.width - 600)/2, panelY - 60, 600, listH + 120, '#111', 'SELECT CHARACTER');
+
+        let y = panelY;
         for(let i=startIdx; i<endIdx; i++) {
             const k = keys[i];
             const c = CHARACTERS[k];
             const u = GameData.progress.unlockedChars.includes(k);
             const s = selectedCharacter === k;
 
-            const by = startY + ((i - startIdx) * 90);
-            const bx = canvas.width/2 - 200;
+            const bx = (canvas.width - 560) / 2;
 
-            // Background for item
-            ctx.fillStyle = s ? '#224422' : '#222';
-            ctx.fillRect(bx, by, 400, 80);
-            ctx.strokeStyle = s ? '#0f0' : '#555';
-            ctx.strokeRect(bx, by, 400, 80);
+            // Draw Item Panel
+            UI.drawPanel(ctx, bx, y, 560, itemH, s ? '#242' : '#222'); // Greenish if selected
 
             // Sprite Preview
             const img = world.images['PLAYER_STAND'];
             if (img) {
-                // Tinting logic is hard with raw canvas without extensive caching or composite ops.
-                // Just draw the base sprite + a colored rect indicator for now to keep it simple/performant.
-                ctx.drawImage(img, bx + 10, by + 10, 60, 60);
+                ctx.drawImage(img, bx + 20, y + 20, 60, 60);
                 // Color indicator
                 ctx.fillStyle = c.color;
-                ctx.fillRect(bx + 55, by + 55, 15, 15);
-                ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 55, by + 55, 15, 15);
-            } else {
-                ctx.fillStyle = c.color;
-                ctx.fillRect(bx + 10, by + 10, 60, 60);
+                ctx.fillRect(bx + 65, y + 65, 15, 15);
+                ctx.strokeStyle = '#fff'; ctx.strokeRect(bx + 65, y + 65, 15, 15);
             }
 
-            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='24px monospace';
-            ctx.fillText(c.name, bx + 80, by + 30);
+            ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='bold 22px monospace';
+            ctx.fillText(c.name, bx + 100, y + 35);
             ctx.font='16px monospace'; ctx.fillStyle='#aaa';
-            ctx.fillText(c.desc, bx + 80, by + 55);
+            ctx.fillText(c.desc, bx + 100, y + 60);
 
-            const btnX = bx + 280;
-            const btnY = by + 15;
+            const btnX = bx + 400;
+            const btnY = y + 25;
 
             if(u){
-                if(!s) UI.drawButton(ctx, 'SELECT', btnX, btnY, 100, 50, '#00a', ()=>selectedCharacter=k);
-                else { ctx.fillStyle='#0f0'; ctx.fillText("EQUIPPED", btnX + 50, btnY + 25); }
+                if(!s) UI.drawButton(ctx, 'SELECT', btnX, btnY, 140, 50, '#00a', ()=>selectedCharacter=k);
+                else { ctx.fillStyle='#0f0'; ctx.font='bold 20px monospace'; ctx.textAlign='center'; ctx.fillText("EQUIPPED", btnX + 70, btnY + 25); }
             } else if(GameData.progress.currency>=c.price) {
-                UI.drawButton(ctx, `$${c.price}`, btnX, btnY, 100, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
+                UI.drawButton(ctx, `$${c.price}`, btnX, btnY, 140, 50, '#0a0', ()=>{GameData.progress.currency-=c.price; GameData.progress.unlockedChars.push(k); GameData.saveProgress();});
             } else {
-                ctx.fillStyle='#555'; ctx.textAlign='center'; ctx.fillText(`LOCKED`, btnX + 50, btnY + 15);
-                ctx.fillText(`$${c.price}`, btnX + 50, btnY + 35);
+                ctx.fillStyle='#555'; ctx.textAlign='center'; ctx.fillText(`LOCKED`, btnX + 70, btnY + 15);
+                ctx.fillText(`$${c.price}`, btnX + 70, btnY + 35);
             }
+            y += itemH + 10;
         }
 
         // Pagination Controls
         if (totalPages > 1) {
+            const py = y + 20;
             ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '20px monospace';
-            ctx.fillText(`PAGE ${window.wardrobePage + 1}/${totalPages}`, canvas.width/2, startY + (itemsPerPage * 90) + 20);
-            if (window.wardrobePage > 0) UI.drawButton(ctx, '<', canvas.width/2 - 100, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage--);
-            if (window.wardrobePage < totalPages - 1) UI.drawButton(ctx, '>', canvas.width/2 + 50, startY + (itemsPerPage * 90), 50, 40, '#333', () => window.wardrobePage++);
+            ctx.fillText(`PAGE ${window.wardrobePage + 1}/${totalPages}`, canvas.width/2, py + 25);
+            if (window.wardrobePage > 0) UI.drawButton(ctx, '<', canvas.width/2 - 120, py, 60, 40, '#444', () => window.wardrobePage--);
+            if (window.wardrobePage < totalPages - 1) UI.drawButton(ctx, '>', canvas.width/2 + 60, py, 60, 40, '#444', () => window.wardrobePage++);
         }
 
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'PLAYING') {
         updateGame(dt); render();
+    } else if (currentScene === 'CHALLENGE') {
+        render(); // Render game world in background
+        challengeTimer -= dt;
+
+        // Challenge Logic: Survive
+        // Spawn intensity maxed out
+        gameTime += dt * 5; // Fast forward difficulty scaling locally
+
+        ctx.fillStyle = 'rgba(50, 0, 50, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#f0f'; ctx.font = '40px monospace'; ctx.textAlign='center';
+        ctx.fillText(`SURVIVE! ${Math.ceil(challengeTimer)}`, canvas.width/2, 100);
+
+        // Spawn waves rapidly
+        if (Math.random() < 0.1) {
+             const a = Math.random()*6.28;
+             const r = 400;
+             enemyPool.get().init('SWARMER', player.x+Math.cos(a)*r, player.y+Math.sin(a)*r);
+        }
+
+        // Reuse updateGame logic but maybe skip some timers?
+        // Just calling updateGame works to keep things moving, but we want custom rules.
+        // Let's manually update entities to enforce "Challenge" state rules if complex.
+        // For simple survival, updateGame is fine, but we need to ensure boss doesn't spawn on top.
+        updateGame(dt);
+
+        if (challengeTimer <= 0) {
+            // Success
+            sceneManager.changeScene('PLAYING');
+            spawnDamageText("CHALLENGE COMPLETE!", player.x, player.y - 50, true);
+            spawnGem(player.x, player.y - 100, 500, true); // Big money reward
+            audioController.setBossMode(false);
+            // Clear screen of enemies
+            enemyPool.active.forEach(e => e.die());
+        }
+        if (player.hp <= 0) {
+            // Fail handled by player.takeDamage -> endGame
+        }
+        UI.handleInput(input);
+
     } else if (currentScene === 'LEVEL_UP') {
         render(); ctx.fillStyle='rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
@@ -1024,38 +1148,45 @@ function gameLoop(ts) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#fff'; ctx.font = '60px monospace'; ctx.textAlign = 'center';
-        ctx.fillText('PAUSED', canvas.width/2, 80);
+        UI.drawPanel(ctx, canvas.width/2 - 250, 50, 500, canvas.height - 100, '#111', 'PAUSED');
 
         // Show Stats
+        ctx.fillStyle = '#fff';
         ctx.font = '24px monospace'; ctx.textAlign = 'left';
         let y = 140;
-        ctx.fillText("--- WEAPONS ---", canvas.width/2 - 200, y);
+        const startX = canvas.width/2 - 200;
+
+        ctx.fillText("--- WEAPONS ---", startX, y);
         y+=30;
         player.weapons.forEach(w => {
             // Friendly Name Logic could be extracted
             const name = w.type.replace('_', ' ');
-            ctx.fillText(`${name} Lv.${w.level} (Dmg: ${Math.floor(w.damage * player.damageMult)})`, canvas.width/2 - 200, y);
+            ctx.fillText(`${name} Lv.${w.level} (Dmg: ${Math.floor(w.damage * player.damageMult)})`, startX, y);
             y+=25;
         });
 
         y += 20;
-        ctx.fillText("--- STATS ---", canvas.width/2 - 200, y);
+        ctx.fillText("--- STATS ---", startX, y);
         y+=30;
-        ctx.fillText(`HP: ${Math.floor(player.hp)}/${player.maxHp}`, canvas.width/2 - 200, y); y+=25;
-        ctx.fillText(`LVL: ${player.level} (XP: ${player.xp}/${player.nextLevelXp})`, canvas.width/2 - 200, y); y+=25;
-        ctx.fillText(`DMG MULT: x${player.damageMult.toFixed(2)}`, canvas.width/2 - 200, y); y+=25;
-        ctx.fillText(`FIRE RATE: x${(1/player.fireRateMult).toFixed(2)}`, canvas.width/2 - 200, y); y+=25;
-        ctx.fillText(`SPEED: ${Math.floor(player.speed)}`, canvas.width/2 - 200, y); y+=25;
+        ctx.fillText(`HP: ${Math.floor(player.hp)}/${player.maxHp}`, startX, y); y+=25;
+        ctx.fillText(`LVL: ${player.level} (XP: ${player.xp}/${player.nextLevelXp})`, startX, y); y+=25;
+        ctx.fillText(`DMG MULT: x${player.damageMult.toFixed(2)}`, startX, y); y+=25;
+        ctx.fillText(`FIRE RATE: x${(1/player.fireRateMult).toFixed(2)}`, startX, y); y+=25;
+        ctx.fillText(`SPEED: ${Math.floor(player.speed)}`, startX, y); y+=25;
 
-        UI.drawButton(ctx, 'RESUME', canvas.width/2+50, canvas.height-150, 150, 50, '#0a0', () => sceneManager.changeScene('PLAYING'));
-        UI.drawButton(ctx, 'QUIT', canvas.width/2+50, canvas.height-80, 150, 50, '#a00', () => sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'RESUME', canvas.width/2-160, canvas.height-180, 150, 50, '#0a0', () => sceneManager.changeScene('PLAYING'));
+        UI.drawButton(ctx, 'QUIT', canvas.width/2+10, canvas.height-180, 150, 50, '#a00', () => sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'GAME_OVER') {
         render(); ctx.fillStyle='rgba(50,0,0,0.8)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.textAlign='center'; ctx.fillStyle='#f00'; ctx.fillText("CRITICAL FAILURE", canvas.width/2, canvas.height/3);
-        UI.drawButton(ctx, 'RETRY', canvas.width/2-100, canvas.height/2+60, 200, 60, '#fff', ()=>startGame());
-        UI.drawButton(ctx, 'RETURN', canvas.width/2-100, canvas.height/2+140, 200, 60, '#333', ()=>sceneManager.changeScene('HUB'));
+
+        const panelW = 400; const panelH = 300;
+        const px = (canvas.width - panelW) / 2;
+        const py = (canvas.height - panelH) / 2;
+        UI.drawPanel(ctx, px, py, panelW, panelH, '#200', 'CRITICAL FAILURE');
+
+        UI.drawButton(ctx, 'RETRY', canvas.width/2-100, py+100, 200, 60, '#fff', ()=>startGame(), 'primary');
+        UI.drawButton(ctx, 'RETURN', canvas.width/2-100, py+180, 200, 60, '#333', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'STORY') {
         ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -1065,10 +1196,20 @@ function gameLoop(ts) {
         txt.forEach(l=>{ctx.fillText(l, canvas.width/2, y); y+=50;});
         if(y<0 || input.taps.length>0) { GameData.progress.storySeen=true; GameData.saveProgress(); startGame(); }
     } else if (currentScene === 'SHOP') {
-        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('UPGRADE SHOP', canvas.width/2, 50);
+        drawGridBackground(ts * 0.02);
 
-        let y = 100;
+        // Main Shop Panel
+        const panelW = Math.min(700, canvas.width - 40);
+        const panelH = Math.min(700, canvas.height - 40);
+        const panelX = (canvas.width - panelW) / 2;
+        const panelY = (canvas.height - panelH) / 2;
+
+        UI.drawPanel(ctx, panelX, panelY, panelW, panelH, '#111', 'UPGRADE SHOP');
+
+        ctx.fillStyle='#ff0'; ctx.font='24px monospace'; ctx.textAlign='right';
+        ctx.fillText(`FRAGMENTS: ${GameData.progress.currency}`, panelX + panelW - 30, panelY + 50);
+
+        let y = panelY + 100;
         const upgrades = [
             { id: 'health', name: 'MAX HP', cost: 100 },
             { id: 'damage', name: 'DAMAGE', cost: 150 },
@@ -1079,72 +1220,75 @@ function gameLoop(ts) {
              const lvl = GameData.progress.upgrades[u.id] || 0;
              const cost = u.cost * (lvl + 1);
 
-             // Draw Icon if available
-             const iconKey = `ICON_${u.id}`; // e.g. ICON_HEALTH (if we rename upgrades to match)
-             // Upgrades in constants.js are 'health', 'magnet', etc.
-             // We generated passives like 'armor', 'speed'.
-             // Shop IDs are different. Let's just draw text for Shop for now or map them.
+             // Draw Item Panel
+             const itemH = 100;
+             UI.drawPanel(ctx, panelX + 30, y, panelW - 60, itemH, '#222');
 
              ctx.fillStyle='#fff'; ctx.textAlign='left';
-             ctx.fillText(`${u.name} (Lvl ${lvl})`, canvas.width/2-150, y+30);
+             ctx.font='bold 24px monospace';
+             ctx.fillText(`${u.name}`, panelX + 50, y + 40);
+             ctx.fillStyle='#aaa'; ctx.font='18px monospace';
+             ctx.fillText(`Level ${lvl}`, panelX + 50, y + 70);
 
              if (GameData.progress.currency >= cost) {
-                 UI.drawButton(ctx, `UPGRADE ($${cost})`, canvas.width/2+50, y, 150, 40, '#0a0', () => {
+                 UI.drawButton(ctx, `UPGRADE ($${cost})`, panelX + panelW - 220, y + 25, 180, 50, '#0a0', () => {
                      GameData.progress.currency -= cost;
                      GameData.progress.upgrades[u.id]++;
                      GameData.saveProgress();
                  });
              } else {
-                 ctx.fillStyle='#555'; ctx.fillRect(canvas.width/2+50, y, 150, 40);
-                 ctx.fillStyle='#888'; ctx.fillText(`$${cost}`, canvas.width/2+90, y+25);
+                 // Disabled button look
+                 const btnX = panelX + panelW - 220;
+                 const btnY = y + 25;
+                 ctx.fillStyle='#444'; ctx.fillRect(btnX, btnY, 180, 50);
+                 ctx.strokeStyle='#666'; ctx.strokeRect(btnX, btnY, 180, 50);
+                 ctx.fillStyle='#888'; ctx.textAlign='center';
+                 ctx.fillText(`$${cost}`, btnX + 90, btnY + 30);
              }
-             y += 60;
+             y += itemH + 20;
         });
 
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('HUB'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', ()=>sceneManager.changeScene('HUB'));
         UI.handleInput(input);
     } else if (currentScene === 'SETTINGS') {
-        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText('SETTINGS', canvas.width/2, 50);
+        drawGridBackground(ts * 0.02);
+        const panelW = Math.min(600, canvas.width - 40);
+        const panelH = 500;
+        const panelX = (canvas.width - panelW) / 2;
+        const panelY = (canvas.height - panelH) / 2;
 
-        let y = 100;
+        UI.drawPanel(ctx, panelX, panelY, panelW, panelH, '#111', 'SETTINGS');
 
-        UI.drawSlider(ctx, 'MASTER VOLUME', GameData.settings.masterVolume, canvas.width/2 - 150, y, 300, 30, (val) => {
+        let y = panelY + 80;
+        const controlW = panelW - 60;
+        const controlX = panelX + 30;
+
+        UI.drawSlider(ctx, 'MASTER VOLUME', GameData.settings.masterVolume, controlX, y, controlW, 30, (val) => {
             GameData.settings.masterVolume = val;
             GameData.saveSettings();
         });
         y += 80;
 
-        UI.drawToggle(ctx, 'CRT EFFECT', GameData.settings.crtEffect, canvas.width/2 - 150, y, 300, 40, (val) => {
+        UI.drawToggle(ctx, 'CRT EFFECT', GameData.settings.crtEffect, controlX, y, controlW, 40, (val) => {
             GameData.settings.crtEffect = val;
             GameData.saveSettings();
         });
         y += 80;
 
-        UI.drawSelector(ctx, 'PARTICLES', ['Low', 'Medium', 'High'], GameData.settings.particles, canvas.width/2 - 150, y, 300, 40, (val) => {
+        UI.drawSelector(ctx, 'PARTICLES', ['Low', 'Medium', 'High'], GameData.settings.particles, controlX, y, controlW, 40, (val) => {
             GameData.settings.particles = val;
             GameData.saveSettings();
         });
         y += 80;
 
-        UI.drawSelector(ctx, 'JOYSTICK SIDE', ['Left', 'Right'], GameData.settings.joystickSide, canvas.width/2 - 150, y, 300, 40, (val) => {
-            GameData.settings.joystickSide = val;
-            GameData.saveSettings();
-        });
-        y += 80;
-
-        UI.drawSelector(ctx, 'JOYSTICK SIZE', ['Small', 'Medium', 'Large'], GameData.settings.joystickSize, canvas.width/2 - 150, y, 300, 40, (val) => {
-            GameData.settings.joystickSize = val;
-            GameData.saveSettings();
-        });
-        y += 80;
-
-        UI.drawToggle(ctx, 'HARDCORE MODE (1 HP)', GameData.settings.hardcore, canvas.width/2 - 150, y, 300, 40, (val) => {
+        // Joystick settings need to fit, maybe scroll or tighten spacing?
+        // Let's just fit them for now.
+        UI.drawToggle(ctx, 'HARDCORE (1 HP)', GameData.settings.hardcore, controlX, y, controlW, 40, (val) => {
             GameData.settings.hardcore = val;
             GameData.saveSettings();
         });
 
-        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 100, 50, '#555', ()=>sceneManager.changeScene('TITLE'));
+        UI.drawButton(ctx, 'BACK', 20, canvas.height-70, 120, 50, '#444', ()=>sceneManager.changeScene('TITLE'));
         UI.handleInput(input);
     }
 
@@ -1153,7 +1297,7 @@ function gameLoop(ts) {
 }
 
 function drawGridBackground(offset) {
-    ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.beginPath();
+    ctx.strokeStyle='rgba(0, 255, 255, 0.2)'; ctx.lineWidth=1; ctx.beginPath();
     const gs = 50; const sy = (offset*20)%gs;
     for(let x=0;x<canvas.width;x+=gs){ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);}
     for(let y=sy;y<canvas.height;y+=gs){ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);}
@@ -1187,17 +1331,8 @@ window.resumeGame = function() {
 };
 
 function drawUpgradeCard(ctx, upgrade, x, y, w, h, action) {
-    // Card Background
-    ctx.fillStyle = '#222';
-    ctx.fillRect(x, y, w, h);
-
-    // Pixel Art Border (Double Border)
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#fff';
-    ctx.strokeRect(x, y, w, h);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#555';
-    ctx.strokeRect(x+6, y+6, w-12, h-12);
+    // Card Background via UI Panel
+    UI.drawPanel(ctx, x, y, w, h, '#222');
 
     // Placeholder Icon
     const iconSize = Math.min(w * 0.3, h * 0.3);
@@ -1215,11 +1350,11 @@ function drawUpgradeCard(ctx, upgrade, x, y, w, h, action) {
     const hasWep = player.weapons.some(w => w.type === upgrade.id);
     const prefix = (!isStat && !hasWep) ? "NEW! " : (hasWep ? "LVL UP! " : "");
 
-    ctx.fillStyle = '#ff0'; ctx.font = '24px monospace'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
     ctx.fillText(prefix + upgrade.title, x + w/2, iconY + iconSize + 30);
 
     // Description
-    ctx.fillStyle = '#ccc'; ctx.font = '18px monospace';
+    ctx.fillStyle = '#ccc'; ctx.font = '16px monospace';
     // Wrap text if needed? For now simple
     ctx.fillText(upgrade.desc, x + w/2, iconY + iconSize + 60);
 

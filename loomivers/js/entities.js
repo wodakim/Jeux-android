@@ -634,10 +634,26 @@ export class DamageText {
 }
 export const damageTextPool = new ObjectPool(() => new DamageText(), 50);
 
+// PORTAL
+export class Portal {
+    constructor() {
+        this.active = false;
+        this.x = 0; this.y = 0;
+        this.width = 64; this.height = 64;
+    }
+    init(x, y) {
+        this.active = true;
+        this.x = x;
+        this.y = y;
+    }
+}
+export const portalPool = new ObjectPool(() => new Portal(), 5);
+
 // HELPERS
 export function spawnGem(x, y, value, isData = false) { gemPool.get().init(x, y, value, isData); }
 export function spawnParticle(x, y, color) { particlePool.get().init(x, y, color); }
 export function spawnDamageText(amount, x, y, isCrit = false) { damageTextPool.get().init(amount, x, y, isCrit); }
+export function spawnPortal(x, y) { portalPool.get().init(x, y); }
 
 // DRONE COMPANION
 export class Drone {
@@ -663,56 +679,65 @@ export class Drone {
         // Orbit Logic
         this.angle += dt;
         let orbitDist = this.distance;
+        let isLooting = false;
 
         // Loot behavior: move towards gem if close
         if (this.type === 'DRONE_LOOT') {
             let targetGem = null;
-            let minGemDist = 200;
+            let minGemDist = 400;
             for (const g of gemPool.active) {
-                const d = Math.sqrt((g.x - player.x)**2 + (g.y - player.y)**2);
+                const dx = g.x - this.x;
+                const dy = g.y - this.y;
+                const d = Math.sqrt(dx*dx + dy*dy);
                 if (d < minGemDist) { minGemDist = d; targetGem = g; }
             }
+
             if (targetGem) {
-                // Move drone towards gem (visual only, real pickup is magnet logic)
-                // Actually, let's make it pull gems
+                isLooting = true;
                 const dx = targetGem.x - this.x;
                 const dy = targetGem.y - this.y;
                 const d = Math.sqrt(dx*dx + dy*dy);
-                if (d > 5) {
-                    this.x += (dx/d) * 200 * dt;
-                    this.y += (dy/d) * 200 * dt;
-                    return; // Skip orbit
+                if (d > 10) {
+                    // Move fast
+                    this.x += (dx/d) * 400 * dt;
+                    this.y += (dy/d) * 400 * dt;
                 } else {
-                    // Pick it up for player
-                    targetGem.x = player.x; targetGem.y = player.y; // Snap to player
+                    // Pick it up for player (Snap to player logic)
+                    targetGem.x = player.x; targetGem.y = player.y;
                 }
             }
         }
 
-        this.x = player.x + player.width/2 + Math.cos(this.angle) * orbitDist - 12;
-        this.y = player.y + player.height/2 + Math.sin(this.angle) * orbitDist - 12;
+        if (!isLooting) {
+            this.x = player.x + player.width/2 + Math.cos(this.angle) * orbitDist - 12;
+            this.y = player.y + player.height/2 + Math.sin(this.angle) * orbitDist - 12;
+        }
 
         // Action Logic
         this.cooldown -= dt;
         if (this.cooldown <= 0) {
             if (this.type === 'BASE' || this.type === 'DRONE_ATTACK') {
                 // Fire
-                let nearest = null, minDist = 300;
+                let nearest = null, minDist = 400;
                 for (const e of enemyPool.active) {
                     const d = Math.sqrt((e.x-this.x)**2 + (e.y-this.y)**2);
                     if (d < minDist) { minDist = d; nearest = e; }
                 }
                 if (nearest) {
-                    const dmg = this.type === 'DRONE_ATTACK' ? 10 : 5;
+                    const dmg = this.type === 'DRONE_ATTACK' ? 15 : 5;
                     projectilePool.get().init('NEON_WAND', this.x, this.y, nearest.x+nearest.width/2, nearest.y+nearest.height/2, dmg);
                     this.cooldown = this.fireRate;
                 }
             } else if (this.type === 'DRONE_HEAL') {
                 // Heal Aura
-                player.hp = Math.min(player.maxHp, player.hp + 5);
-                spawnDamageText("+5 HP", player.x, player.y - 20, false);
-                spawnParticle(player.x, player.y, '#0f0');
-                this.cooldown = 5.0;
+                if (player.hp < player.maxHp) {
+                    player.hp = Math.min(player.maxHp, player.hp + 5);
+                    spawnDamageText("+5 HP", player.x, player.y - 20, false);
+                    spawnParticle(player.x, player.y, '#0f0');
+                    this.cooldown = 5.0;
+                } else {
+                    this.cooldown = 1.0;
+                }
             }
         }
     }
